@@ -1,9 +1,9 @@
 # OpsPilot 智能运维助手 · 功能清单
 
-**文档版本：** V1.0
-**发布日期：** 2026-06-02
+**文档版本：** V1.1
+**发布日期：** 2026-06-19
 **适用范围：** BK-Lite OpsPilot 智能运维助手模块
-**编制依据：** OpsPilot PRD v1.1（2026-05-28）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对
+**编制依据：** OpsPilot PRD v1.1（2026-05-28）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对；增量更新基于 REF=0fbb99c25（2026-06-19）
 
 ---
 
@@ -83,11 +83,13 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
 | 应用机器人管理 | 应用机器人列表管理与上线 / 下线 | 上线后可对外服务，下线后停止对外响应 | GA |
+| 机器人使用组织授权 | 管理组织可将机器人对话/接口调用权开放给其它组织（使用组织），使用组织仅能发起对话，无工作台查看、编辑、删除权限 | 权限门控 `bot_settings-Edit`；不变式：管理组织恒为使用组织子集（team ⊆ usage_team），管理组织不可从使用组织中移除；授权动作 `authorize_usage_team`（`server/apps/opspilot/viewsets/bot_view.py:216-243`；`server/apps/opspilot/models/bot_mgmt.py:25-29`） | GA |
 | 应用类型 | 支持三类应用 | Pilot、LobeChat、ChatFlow | GA |
 | ChatFlow 画布编排 | ChatFlow 画布编排与节点配置 | 应用由工作流保存时自动同步，不通过应用接口直接创建 | GA |
 | 节点类别 | ChatFlow 支持的节点类别 | 触发、应用、智能体、记忆、逻辑判断（条件/意图分类）、动作（HTTP/通知）等 | GA |
 | 节点执行测试 | 节点执行测试与执行过程查看 | 节点状态：pending/running/completed/failed | GA |
-| 流程中断与提交 | 执行流程中断、审批提交与选择提交 | 任务状态：running/interrupt_requested/interrupted/success/fail | GA |
+| 工作流执行测试区分 | 配置页测试执行（is_test=True）与真实对话执行（is_test=False）相互隔离：仅管理组织可发起测试执行，同一机器人同时仅允许一个运行中的测试执行；配置页画布仅恢复测试执行，执行记录列表支持 is_test 过滤 | `WorkFlowTaskResult.is_test` 字段（`server/apps/opspilot/models/bot_mgmt.py:292`）；画布恢复仅取 is_test=True（`server/apps/opspilot/viewsets/bot_view.py:104-110`）；同机器人同时仅一个运行中测试限流（`server/apps/opspilot/views.py:700-705`）；执行记录列表 is_test 过滤（`server/apps/opspilot/viewsets/workflow_task_result_view.py:23`） | GA |
+| 流程中断与提交 | 执行流程中断、审批提交与选择提交 | 任务状态：running/interrupt_requested/interrupted/success/fail；submit_approval / submit_choice 要求有效 API Token 且 execution_id 须归属调用方团队管理的机器人，跨团队或不存在统一 404（`server/apps/opspilot/views.py:790-866`） | GA |
 | 执行与会话日志 | 执行日志检索、会话日志查看、输出数据查看 | 主任务与节点级结果均保留 | GA |
 | 统计视图 | 会话量、活跃用户、Token 消耗等统计 | — | GA |
 

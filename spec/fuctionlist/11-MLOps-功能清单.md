@@ -1,9 +1,9 @@
 # MLOps · 功能清单
 
-**文档版本：** V1.0
-**发布日期：** 2026-06-02
+**文档版本：** V1.1
+**发布日期：** 2026-06-19
 **适用范围：** BK-Lite MLOps 模块
-**编制依据：** MLOps PRD v1.1（2026-05-28）与 `server/apps/mlops`、`web/src/app/mlops` 源代码核对
+**编制依据：** MLOps PRD v1.1（2026-05-28）与 `server/apps/mlops`、`web/src/app/mlops` 源代码核对（2026-06-19 增量更新）
 
 ---
 
@@ -72,7 +72,7 @@ MLOps 提供从数据集管理、训练任务编排到能力发布与在线推�
 | 服务运行控制 | 服务启动、停止、移除 | 通过统一运行时通道执行 | GA |
 | 服务状态双口径 | 服务状态分用户意图状态与容器运行状态两个口径 | 意图状态：active / inactive（默认 inactive）；仅容器实际运行时进入 active 语义 | GA |
 | 容器运行细节 | 容器状态、端口与运行细节展示 | 记录 webhookd 返回的容器实时状态（status、id、state、port、detail 等） | GA |
-| 在线推理 | 按场景输入与输出执行在线推理调用 | — | GA |
+| 在线推理 | 按场景输入与输出执行在线推理调用 | 结构化场景（异常检测/时序预测/日志聚类/文本分类）单次批量上限默认 10000 条（env `MLOPS_PREDICT_MAX_BATCH_SIZE`）；图片分类/目标检测单次批量上限默认 100 张（env `MLOPS_PREDICT_MAX_IMAGE_BATCH_SIZE`）且单图 base64 默认 ≤10MB（env `MLOPS_PREDICT_MAX_IMAGE_BYTES`）；超限返回 HTTP 413（server/apps/mlops/views/anomaly_detection.py:1347-1353, image_classification.py:1360-1373） | GA |
 
 ### 7. 算法配置管理
 

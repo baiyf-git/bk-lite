@@ -17,6 +17,12 @@
 | NodeMgmtSyncConfig / NodeMgmtSyncRun | `models/node_mgmt_sync.py:7,22` | 节点管理同步配置与运行记录（两个独立模型） |
 | CollectTaskCredentialHit | `models/collect_task_credential_hit.py` | 采集任务凭据使用审计 |
 
+**_display 冗余字段生成规则（扩展说明）**【已实现/已存在】：`display_field/handler.py` 对不同字段类型差异化生成 `_display` 冗余，影响全文检索可命中范围：
+
+- **文件型（附件/图片）字段**：调用 `DisplayFieldConverter.convert_file()`（`handler.py:206-249`），提取每个文件 `name` 的主体（去目录路径、去最后一个扩展名，即"词干"），多文件用分隔符拼接写入 `_display`，使文件字段可被全文检索命中；文件 URL/ID/大小等原始元数据 JSON 仍排除出全文检索索引。`_display` 生成降级规则：`convert_file` 解析失败或空值时返回 `""`（`handler.py:221-235`）；构建异常路径对文件型字段亦降级为 `""`（而非原始 JSON），避免污染索引（`handler.py:371`）。
+- **敏感型字段（pwd）**：常量 `SENSITIVE_FIELD_TYPES = frozenset(["pwd"])`（`display_field/constants.py:17`）标识密码字段为密文——在 `ExcludeFieldsCache` 中与展示型/文件型字段一并排除出全文检索（`display_field/cache.py:431`），且**刻意不生成 `_display`**，使密码字段完全不可被搜索命中（与展示型字段"排除原值但靠 `_display` 可搜"语义不同）。
+- **历史实例回填（幂等）**：模型字段定义变更后，通过 `ModelManage.rebuild_file_instances_display(model_id, attr_id)`（`services/model.py:1136`）幂等回填历史实例的文件 `_display`；该方法由 `views/model.py:580-583` 在文件型属性变更时触发，不抛异常、失败仅记 error 日志，不中断主流程。
+
 **存储**：PostgreSQL（ORM）；**Neo4j / FalkorDB**（关系图谱，驱动实现 `graph/{neo4j,falkordb}.py`，运行期由 `graph/drivers/graph_client.py:46-52` 按环境变量 `FALKORDB_HOST` 动态二选一——设置则用 FalkorDB，否则回落 Neo4j，并非两者并存【已实现/已存在】）；Neo4j 搜索/过滤路径已参数化（`graph/neo4j.py:10,301`，引入 `FORMAT_TYPE_PARAMS + ParameterCollector`，`format_search_params/format_final_params` 返回 `(params_str, query_params)` 元组并以 `session.run(**query_params)` 执行，权限过滤条件同步参数化，该路径的 Cypher 注入风险已消除【已实现/已存在】；但写入与按 id 取详情等路径仍为 f-string 拼接、未参数化——`create_entity` `CREATE (n:{label} {properties_str})`（`:197`）、`MATCH (n) WHERE id(n) = {id}`（`:408`），属局部加固而非全面消除【已实现/待确认风险】）；MinIO（配置文件，`cmdb-config-file` bucket）；VictoriaMetrics（K8s 指标查询，`collection/query_vm.py`）。
 
 **内置模型字段（rack / server_room）新增布局属性**【已实现/已存在】：`support-files/model_config.xlsx` 新增以下字段供机房俯视图与机柜正视 U 图使用，消费方为 `services/rack_room.py`（`get_rack_layout`:146-159 读 `rack_u_start`/`u_size`/`u_count`；`get_room_layout`:162-198 读 `row`/`col`/`u_count`）：
@@ -65,6 +71,8 @@
     | `create_instance_association` | :627 | 创建实例关联（写，需 src_inst_id/dst_inst_id/model_asst_id） |
     | `delete_instance_association` | :659 | 删除实例关联（写，需 asso_id） |
 - **RPC 客户端**（`apps/rpc/cmdb.py:44-94`）：为上述第五类 NATS handler 中的 8 个新增 RPC 包装方法供跨模块调用：`list_instances`、`search_model_attrs`、`search_models`、`search_classifications`、`search_model_associations`、`search_instance_associations`、`create_instance_association`、`delete_instance_association`；`search_instances`/`search_instances_batch` 为原有包装方法。注意：第五类 NATS handler 中的 `create_instance`、`delete_instance` 暂无对应 RPC 包装方法，仅可经 NATS 主题直接调用【已实现/已存在】。
+- **出向 RPC：变更记录镜像进平台操作日志**【已实现/已存在】：管理类变更（场景属于 `MODEL_MANAGEMENT_CHANGE`/`COLLECT_AUTOMATION_CHANGE`/`CUSTOM_REPORTING_CHANGE`/`RELATION_CHANGE`，常量集 `_MIRROR_SCENARIOS`，`utils/change_record.py:20`）写入本地 `ChangeRecord` 后，由 `_mirror_change_record()`（`:31-49`）经 `SystemMgmt().save_operation_log` NATS RPC 镜像一份到 `system_mgmt` 平台操作日志，供平台统一审计。镜像为尽力而为——异常仅 `logger.warning` 记录，绝不阻断源写入（`:46-49`）。三个调用点：`create_change_record`（`:65`）、`batch_create_change_record`（`:77`）、`create_change_record_by_asso`（`:130`）。
+- **横切能力：组织上下文统一读取**【已实现/已存在】：CMDB 各权限/取数入口的 `current_team` 读取统一改为 `apps.core.utils.team_utils.get_current_team(request)`（`utils/base.py:138`，原为直接读 `request.COOKIES.get("current_team")`）。`get_current_team` 优先识别 `APISecretMiddleware` 注入的 `request._api_current_team`，其次回落 Cookie，使 API Key（无浏览器 cookie）调用 CMDB 实例查询/导入/采集/订阅/配置文件等端点时能正确解析组织上下文（影响范围：`views/instance.py:204,675`；`views/collect.py:179,257`；`views/subscription.py:24,128`；`services/collect_tool_service.py:47`；`services/config_file_service.py:616`；`serializers/subscription.py:53`）。
 - Celery：`tasks/celery_tasks.py` 注册 13 个 `@shared_task`，详见 §5。
 
 ## 5. 核心数据流 / 任务
@@ -104,4 +112,4 @@
 - 凭据加密密钥管理与轮转策略【待确认】。
 
 ## 7. 证据来源
-`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/oceanstor.py,constants/constants.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,views/instance.py:1030-1072,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`。
+`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/oceanstor.py,constants/constants.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,services/model.py:1136,views/instance.py:1030-1072,views/model.py:580-583,utils/change_record.py:18-49,utils/base.py:138,display_field/handler.py:206-249,display_field/constants.py:17,display_field/cache.py:431,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`；`server/apps/core/utils/team_utils.py`（`get_current_team`）；`server/apps/rpc/system_mgmt.py`（`SystemMgmt().save_operation_log`）。

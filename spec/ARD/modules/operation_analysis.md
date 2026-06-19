@@ -79,6 +79,7 @@
 - NATS：`nats/nats.py` 暴露 `get_operation_analysis_module_data`（`nats/nats.py:11`）/`get_operation_analysis_module_list`（`nats/nats.py:28`）（仅暴露自身数据源模块）；`common/get_nats_source_data.py:GetNatsData.get_data()` 为**通用数据源取数器**。其当前实现为**单命名空间取数**：先经 `_get_target_namespace()` 从 `params.namespace_id` 解析目标命名空间（运行时选择；未指定则取第一个可用命名空间，显式指定但数据源未关联该命名空间则报错），再按 `path` 在该命名空间的 NATS 客户端上解析函数；当客户端存在 `DEFAULT_NATS` 属性时改调 `get_customization_nast_data`，否则按 `path` 取同名函数（`common/get_nats_source_data.py:83-138`）。
   - 更正：operation_analysis **Python 代码中未硬编码调用** alerts 的 `get_alert_*`；这些是 alerts 独立的 NATS 端点，经通用取数器按 `path` 动态解析调用，非代码级内置依赖（证据：`grep -rn "get_alert_\|alerts\." --include=*.py` 在本模块无命中）。需注意：内置画布 YAML `support-files/builtin_canvases.yaml` 中确以 dataSource 字符串形式配置了 `get_alert_*`/`alert/get_alert_*` 等取数路径（约 37 处），即 alerts 是**配置态数据源**而非代码态依赖。
 - 服务：`services/directory_service.py`（目录树）、`services/node_tree.py`、`services/import_export/*`（YAML 导入导出）。
+- 组织上下文读取（current_team）【已实现/已存在】：本模块涉及组织上下文的四处读取（NATS 取数器、组权限过滤、目录树、导入导出）已由直接读 `request.COOKIES['current_team']` 统一改为调用 `apps.core.utils.team_utils.get_current_team(request)`（`server/apps/core/utils/team_utils.py:23-41`）。该 helper 来源优先级为：① `request._api_current_team`（`APISecretMiddleware` 为 API Key 调用注入）> ② `request.COOKIES['current_team']`（浏览器正常登录）> ③ 默认值（`None`）。变更使 API Key（开放接口）场景可正确解析组织上下文，不再因缺少浏览器 cookie 而取值失败，亦不污染只读的 `request.COOKIES`。属能力增强，非架构级变更。调用点：`common/get_nats_source_data.py:7,42`、`filters/base_filters.py:10,51`、`services/directory_service.py:10,22`、`views/import_export_view.py:18,179`。
 - 依赖 `apps.core` 装饰器/视图工具；RPC 经 `OperationAnalysisRpc`（独立 server/namespace，`apps/rpc/base.py`）。
 - 初始化/导出 management commands【已实现/已存在】：`init_builtin_canvases`（内置画布落地）、`init_default_namespace`（默认命名空间）、`init_default_groups`（默认分组）、`init_source_api_data`（内置数据源导入）、`export_source_api_data`（数据源导出），是内置画布与默认数据源/命名空间的落地机制（`management/commands/`）。
 
@@ -88,6 +89,13 @@
 
 ## 6. 证据来源
 `server/apps/operation_analysis/{urls.py,models/*,views/datasource_view.py,views/view.py,nats/nats.py,common/get_nats_source_data.py,constants/constants.py,tasks/tasks.py,management/commands/*,services/*}`、`apps/operation_analysis/migrations/0010_remove_namespace_groups.py`、`apps/rpc/base.py:OperationAnalysisRpc`。
+
+§4 组织上下文新增证据：
+- `server/apps/core/utils/team_utils.py:23-41`（`get_current_team` helper 实现，含来源优先级注释）
+- `server/apps/operation_analysis/common/get_nats_source_data.py:7,42`（NATS 取数器调用点）
+- `server/apps/operation_analysis/filters/base_filters.py:10,51`（组权限过滤调用点）
+- `server/apps/operation_analysis/services/directory_service.py:10,22`（目录树调用点）
+- `server/apps/operation_analysis/views/import_export_view.py:18,179`（导入导出调用点）
 
 前端层新增证据：
 - `web/src/app/ops-analysis/components/widgetRegistry.ts:14-25`（组件注册表全量映射）
