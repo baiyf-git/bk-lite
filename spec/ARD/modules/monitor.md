@@ -23,6 +23,15 @@
 ## 3. 接口【已实现/已存在】
 各为独立 ViewSet 路由：`monitor_object`、`monitor_object_type`、`metrics_group`、`metrics`、`metrics_instance`、`organization_rule`、`monitor_instance`、`monitor_policy`、`monitor_plugin`、`monitor_alert`、`monitor_event`、`manual_collect`、`unit`、`monitor_condition`、`system_mgmt`、`node_mgmt`；开放端点 `open_api/infra`。
 
+- `monitor_policy` ViewSet 新增端点：`POST monitor_policy/preview`（`detail=False`，`url_path="preview"`）——由 `PolicyPreviewService` 即时执行 VictoriaMetrics 查询，按入参中的 `query_condition`/`period`/`algorithm`/`group_by` 组合生成 PromQL 并返回 `{query, data, warnings}`；设计用于策略配置页「指标预览」辅助面板，前端不写入数据库。
+  - 参见：[[../../prd/监控系统/事件.md#3.2 策略]]（产品侧预览能力描述）
+
+> 证据来源：`server/apps/monitor/views/monitor_policy.py:466-468`（action preview）、`server/apps/monitor/services/policy_preview.py:1`　|　同步基线：0fbb99c25　|　【已实现】
+
+**MonitorPolicy 写入契约（校验层）**：`MonitorPolicySerializer` 新增字段级校验——`validate_threshold` 挡非法运算符/等级；`validate_query_condition` 校结构完整性并对 `filter` 中的 label name（`_LABEL_NAME_RE`）与运算符（`_VALID_LABEL_METHODS`）执行注入白名单校验；`validate_source` 检查 type∈{instance,organization}；`validate_algorithm` 挡不在下游支持集内的聚合函数。非法配置在 API 写入边界即被拒绝，不延迟到后台扫描期崩溃。
+
+> 证据来源：`server/apps/monitor/serializers/monitor_policy.py:21-128`　|　同步基线：0fbb99c25　|　【已实现】
+
 - Celery 任务与调度【已实现/已存在】：
   - `tasks/grouping_rule.py:sync_instance_and_group`（同步实例分组，查 VM）—— 由 beat 每 10 分钟触发（`config.py:8-11`）。
   - `tasks/monitor_policy.py:retry_alert_center_lifecycle_notify_task`（告警中心生命周期通知重试，`monitor_policy.py:100`）—— 由 beat 每 5 分钟触发（`config.py:12-15`）。
@@ -33,14 +42,23 @@
   - 创建类（`monitor.py:471-519`）：`create_monitor_object_type` / `create_monitor_object` / `create_monitor_plugin` / `create_metric_group` / `create_metric` / `create_monitor_policy`。
   - 查询类（`monitor.py:520-1063`）：`monitor_objects` / `monitor_object_instance_count` / `monitor_metrics` / `monitor_object_instances` / `query_monitor_data_by_metric` / `monitor_instance_metrics` / `query_monitor_alert_segments` / `query_latest_active_alerts` / `mm_query` / `mm_query_range` / `get_monitor_statistics`。
   - 权限授权类：`_get_authorized_monitor_instances` 等内部辅助（`monitor.py:425-462`）；`nats/permission.py:7,33` 另注册 `get_monitor_module_data` / `get_monitor_module_list`，按组织过滤实例/策略/条件。
+  - **`get_monitor_statistics` 权限口径加固**：本轮引入 `_scope_count_queryset` 统一收窄逻辑——超管返回全量；非超管且无 team 视为零授权，**返回空集（`qs.none()`）而非全量**，杜绝无组织归属用户跨组织计数泄露。平台级目录（监控对象/类型/插件/指标/指标分组）属全局配置、非租户数据，不做组织收窄；仅监控实例/采集配置/策略及下游告警类计数按 org 收窄。
+
+> 证据来源：`server/apps/monitor/nats/monitor.py:1041-1051`（_scope_count_queryset，qs.none()）、`:1055-1109`（get_monitor_statistics 收窄逻辑）　|　同步基线：0fbb99c25　|　【已实现】
 - 流量监控接入（NetFlow/sFlow）【已实现/已存在】：服务层 `services/flow_*.py` 承载流量接入能力，对应 PRD「集成·流量监控接入」：
   - `flow_access_guide.py:10` 定义协议监听端口 `PROTOCOL_PORT_MAP = {netflow:2055, sflow:6343}`，依赖 `apps/rpc/node_mgmt` 拼接云区域接入地址。
-  - `flow_onboarding.py:17` 创建/绑定流量资产，兜底采样率默认 1000（`DEFAULT_FALLBACK_SAMPLING_RATE`）。
+  - `flow_onboarding.py:17` 创建/绑定流量资产，兜底采样率默认 1000（`DEFAULT_FALLBACK_SAMPLING_RATE`）。资产标识键由 `_build_asset_key(cloud_region_id, ip)` 生成，底层调用 `utils/dimension.py:build_safe_instance_id` 基于 region+ip 组合构建安全实例 ID（替代旧 `flow:{obj}:{region}:{ip}` 格式）；`_ensure_asset_storage_key` 检测已有实例是否使用旧键格式，若发现则通过 `_move_asset_references` 将存储键与历史实例引用迁移至新格式，保证兼容性。
   - `flow_env_config.py` 按云区域刷新采集器环境变量（`refresh_collect_configs`）。
   - `flow_sampling.py:10` 的 `FlowSamplingService.normalize_payload` 归一化上报载荷，产出 `effective_sampling_rate` 字段及来源标记 `sampling_rate_source`（上报值 `reported_effective_sampling_rate` / 派生 `normalized_from_*` / 兜底 `fallback_sampling_rate`）。
 
+> 证据来源：`server/apps/monitor/services/flow_onboarding.py:405-442`（_build_asset_key/_ensure_asset_storage_key/_move_asset_references）、`server/apps/monitor/utils/dimension.py:build_safe_instance_id`　|　同步基线：0fbb99c25　|　【已实现】
+
 ## 5. 数据流【已实现/已存在】
 - 指标采集与告警评估：telegraf 采集 → VictoriaMetrics →（PromQL）scan_policy_task → 阈值/聚合/恢复评估 → MonitorEvent → MonitorAlert（原始快照存 MinIO）。
+- 事件写入一致性：事件原始数据（MonitorEventRawData）写入由逐条 `save` 改为 `bulk_create` 并置于 `transaction.atomic` 事务保护，告警中心通知延后到 `on_commit` 回调后触发，确保通知不早于数据持久化完成。
+
+> 证据来源：`server/apps/monitor/tasks/services/policy_scan/event_alert_manager.py`（transaction.atomic / bulk_create / _schedule_notifications on_commit）　|　同步基线：0fbb99c25　|　【已实现】
+
 - 流量监控接入：网络设备发送 NetFlow(2055)/sFlow(6343) → 采集器按云区域环境变量监听（`flow_env_config.py`） → 采样率归一化（`flow_sampling.py`） → 入 VictoriaMetrics，复用上述告警评估链路。
 - 漏跑补偿机制【已实现/已存在】：`scan_policy_task` 基于策略 `last_run_time` 与当前时间计算 gap，按周期数自动补偿历史扫描点（`tasks/monitor_policy.py:59-77`）。补偿上限：单次最多 `MAX_BACKFILL_COUNT=30` 个周期、最大补偿时间范围 `MAX_BACKFILL_SECONDS=24*3600` 秒，超出范围的历史数据不再补偿（`constants/alert_policy.py:5-7`）。
 

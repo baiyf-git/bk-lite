@@ -1,9 +1,9 @@
 # OpsPilot 智能运维助手 · 功能清单
 
-**文档版本：** V1.0
-**发布日期：** 2026-06-02
+**文档版本：** V1.2
+**发布日期：** 2026-06-22
 **适用范围：** BK-Lite OpsPilot 智能运维助手模块
-**编制依据：** OpsPilot PRD v1.1（2026-05-28）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对
+**编制依据：** OpsPilot PRD v1.1（2026-05-28）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对；增量更新基于 rogerly 分支（git diff master..HEAD -- server/apps/opspilot，核对日期 2026-06-22）
 
 ---
 
@@ -34,6 +34,7 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 | MCP 链接配置 | 配置 MCP 链接与变量 | — | GA |
 | 变量类型 | 工具变量支持类型区分 | 含文本与密码类型；密码类型字段加密保存 | GA |
 | MCP 子工具拉取 | 从 MCP 拉取可用子工具能力 | — | GA |
+| 工具展示名 | 内置工具支持中英文展示名（display_name） | 通过语言包 en.yaml / zh-Hans.yaml 配置 | GA |
 | 团队可见范围 | 按团队分组控制工具可见范围 | — | GA |
 
 ### 3. 知识库管理
@@ -58,12 +59,17 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 |---|---|---|---|
 | 记忆空间 CRUD | 记忆空间的新增、编辑、删除、详情查看 | — | GA |
 | 可见范围 | 记忆空间可见范围设置 | 2 种：个人记忆(personal)、团队记忆(team) | GA |
-| 空间配置 | 配置简介、写入规则与默认模型 | — | GA |
+| 存储引擎 | 记忆空间支持多种存储后端 | 4 种：本地存储(local，默认)、Mem0、Zep、自定义 API(custom)；引擎通过 MemoryEngineRegistry 注册，local 开箱即用，Mem0/Zep 需安装对应 SDK | GA |
+| 空间配置 | 配置简介、写入规则、默认模型与存储引擎配置 | 存储配置中的敏感字段（如 api_key）加密存储 | GA |
 | 写入测试 | 基于写入规则与默认模型由 LLM 处理输入并返回结果 | 缺少写入规则时直接返回原始输入 | GA |
 | 记忆条目管理 | 记忆条目的新增、编辑、删除、查看 | 含标题与内容；条目归属记忆空间，空间删除时条目一并删除 | GA |
-| 条目可见性 | 个人记忆空间内条目仅创建者可见；团队记忆空间按团队可见性共享 | — | GA |
+| 条目可见性 | 个人记忆空间内条目仅创建者可见；团队记忆空间按团队可见性共享 | 个人记忆按 owner_username / owner_domain 隔离，组织记忆按 organization_id 隔离 | GA |
 | 条目筛选 | 记忆条目按记忆空间筛选 | — | GA |
+| 记忆写入缓冲 | 支持按工作流节点分批缓冲写入，合并后再落库 | MemoryWriteCache 模型；Celery Beat 在每日 00:00 自动冲刷全部待处理缓冲 | GA |
+| 引擎管理 API | 可查询已注册的记忆引擎列表、获取引擎配置 Schema、对非 local 引擎进行连接测试 | `GET /api/proxy/opspilot/memory_mgmt/memory_engines/`、`GET /api/proxy/opspilot/memory_mgmt/memory_engines/{type}/schema/`、`POST /api/proxy/opspilot/memory_mgmt/memory_engines/{type}/test/`（DRF 路由 basename=memory_engines，url_path 子路径 schema/test） | GA |
 | ChatFlow 记忆节点 | 在 ChatFlow 中通过记忆节点引用记忆能力 | 含记忆读取(memory_read)、记忆写入(memory_write)节点 | GA |
+
+> 证据来源：server/apps/opspilot/models/memory_mgmt.py（MemorySpace.STORAGE_CHOICES、MemoryWriteCache）、server/apps/opspilot/memory/engines/registry.py、server/apps/opspilot/viewsets/memory_engine_view.py、server/apps/opspilot/config.py（flush-pending-memory-write-cache Beat 任务）
 
 ### 5. 智能体管理
 
@@ -82,14 +88,21 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 应用机器人管理 | 应用机器人列表管理与上线 / 下线 | 上线后可对外服务，下线后停止对外响应 | GA |
+| 应用机器人管理 | 应用机器人列表管理与上线 / 下线 | 上线后可对外服务，下线后停止对外响应；支持管理组织（team）/ 使用组织（usage_team）分离，不变式 team⊆usage_team，管理组织恒含于使用组织；授权接口 `POST /api/proxy/opspilot/bot_mgmt/bot/{id}/authorize_usage_team/` 可扩充使用组织 | GA |
 | 应用类型 | 支持三类应用 | Pilot、LobeChat、ChatFlow | GA |
 | ChatFlow 画布编排 | ChatFlow 画布编排与节点配置 | 应用由工作流保存时自动同步，不通过应用接口直接创建 | GA |
 | 节点类别 | ChatFlow 支持的节点类别 | 触发、应用、智能体、记忆、逻辑判断（条件/意图分类）、动作（HTTP/通知）等 | GA |
 | 节点执行测试 | 节点执行测试与执行过程查看 | 节点状态：pending/running/completed/failed | GA |
-| 流程中断与提交 | 执行流程中断、审批提交与选择提交 | 任务状态：running/interrupt_requested/interrupted/success/fail | GA |
-| 执行与会话日志 | 执行日志检索、会话日志查看、输出数据查看 | 主任务与节点级结果均保留 | GA |
+| 执行测试隔离 | 配置页测试执行与真实对话执行相互隔离 | 仅 is_test=True 的运行中执行回填配置画布（WorkFlowTaskResult.is_test 字段区分）；测试并发守卫只计测试执行（同一机器人同时仅一个活跃测试执行）；被授权使用组织不可发起测试 | GA |
+| 流程中断与提交 | 执行流程中断、审批提交与选择提交 | 任务状态：running/interrupt_requested/interrupted/success/fail；审批提交/选择提交需有效 API Token 且 execution_id 归属调用者组织 | GA |
+| 执行与会话日志 | 执行日志检索、会话日志查看、输出数据查看 | 主任务与节点级结果均保留；执行日志/节点结果/对话历史详情均按调用者组织作用域返回，越权返回 404 | GA |
+| NATS 触发节点同步 | ChatFlow 发布时，workflow 中 type=nats 的触发节点自动同步为 system_mgmt 中的 NATS 通道 | 通道名 `{bot名} - {节点label}`，config 中携带 source="opspilot"/bot_id/node_id；删除应用时自动清理托管通道 | GA |
+| 工作流附件文件 | 工作流执行中可生成可下载的附件文件并通过签名 URL 分发 | 支持格式：md、pdf、docx/word；附件存储到 MinIO，签名 URL 默认有效期 24 小时（可配置 WORKFLOW_ATTACHMENT_DOWNLOAD_MAX_AGE）；Celery Beat 在每日 03:00 清理 3 天前的附件 | GA |
 | 统计视图 | 会话量、活跃用户、Token 消耗等统计 | — | GA |
+| 操作日志 | 工作台、渠道、记忆空间、知识图谱等资源的 CRUD 操作自动写入平台操作日志 | 通过 log_operation 统一记录，涵盖新增/编辑/删除/启动/停止操作 | GA |
+
+> 证据来源：server/apps/opspilot/models/bot_mgmt.py（usage_team 字段、WorkflowAttachmentAsset 模型）、viewsets/bot_view.py（_merge_usage_team、authorize_usage_team、UPDATABLE_FIELDS）、services/nats_channel_sync.py、services/workflow_attachment_service.py、config.py（cleanup-expired-workflow-attachments Beat 任务）、viewsets/channel_view.py、viewsets/memory_view.py、viewsets/knowledge_graph_view.py　|　同步基线：rogerly 分支 2026-06-22　|　【已实现】
+> 参见：[[../ARD/modules/opspilot.md#3-接口]]、[[../prd/OpsPilot/工作台.md#4-关键规则]]
 
 ### 7. 渠道与会话
 
@@ -110,11 +123,13 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 | LobeChat 兼容接口 | LobeChat 兼容聊天补全接口 | — | GA |
 | ChatFlow 执行接口 | 按 bot_id / node_id 执行 ChatFlow | — | GA |
 | 企业渠道触发 | 企业微信、微信公众号、钉钉触发入口 | — | GA |
-| 工作流执行类型 | 支持的工作流执行类型 | OpenAI、RESTful、Celery（定时）、企业微信、微信公众号、钉钉、嵌入式对话、Web、Mobile、AG-UI | GA |
+| NATS 触发入口 | 由告警中心通过 NATS 消息触发 OpsPilot ChatFlow workflow | NATS API `trigger_workflow_by_nats`；team 限单组织 ID；执行类型记为 `nats`；入参校验完整（message/team/user_ids/bot_id/node_id）| GA |
+| 工作流执行类型 | 支持的工作流执行类型 | 共 11 种：OpenAI、RESTful、Celery（定时）、企业微信、微信公众号、钉钉、嵌入式对话、Web、Mobile、AG-UI、NATS | GA |
+| 工作流附件下载 | 工作流执行生成的附件通过签名 URL 下载 | `GET /api/proxy/opspilot/bot_mgmt/workflow_attachment/download/{token}/`；Token 绑定 aid+eid，TimestampSigner 签名防猜测与越权；默认 24 小时有效期 | GA |
 
 ## 三、能力边界与约束
 
-资源可见范围以团队分组为边界，非超级管理员仅可访问有权限团队内资源，关键资源编辑需通过模块权限点校验。知识库名称唯一，删除前须检查智能体引用，变更基础模型后须重训练文档；文档须经"上传—处理—训练—可检索"全状态机方可使用。个人记忆条目仅创建者可见，记忆空间删除时其条目一并删除。应用由 ChatFlow 工作流保存时自动同步，不经应用接口直接创建。模型密钥、工具密码、渠道密钥全程加密存储且对外脱敏展示。本模块不含非 OpsPilot 模块的资产管理、作业编排与监控能力，不定义第三方平台的组织权限模型。
+资源可见范围以团队分组为边界，非超级管理员仅可访问有权限团队内资源，关键资源编辑需通过模块权限点校验。应用机器人区分管理组织（team）与使用组织（usage_team），不变式 team⊆usage_team 在创建/更新/授权时强制维持；使用组织仅可对话不可管理；审批/选择提交、执行日志与对话历史详情严格按组织作用域鉴权，越权访问一律返回不可见（404）。知识库名称唯一，删除前须检查智能体引用，变更基础模型后须重训练文档；文档须经"上传—处理—训练—可检索"全状态机方可使用。个人记忆条目仅创建者可见，记忆空间删除时其条目一并删除；记忆写入支持 LLM 异步合并，团队/个人写入路径均通过 Celery 任务异步处理。应用由 ChatFlow 工作流保存时自动同步，不经应用接口直接创建。模型密钥、工具密码、渠道密钥、记忆存储配置中的 api_key 全程加密存储且对外脱敏展示。模型供应商被子模型引用时删除请求返回 400（而非 500），需先删除子模型才可删除供应商；Bot 更新接口仅允许白名单字段写入，防止 mass-assignment。工作流附件签名 URL 绑定附件主键与执行 ID，默认 24 小时过期；附件文件每日 03:00 清理 3 天前的历史记录（MinIO + DB 同步清理）。NATS 触发仅限单组织调用，多组织 team 拒绝处理。本模块不含非 OpsPilot 模块的资产管理、作业编排与监控能力，不定义第三方平台的组织权限模型。
 
 ## 四、平台协同
 
@@ -124,7 +139,7 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 
 以下枚举均以后端 `apps/opspilot/enum.py`、`models/*` 与前端 `web/src/app/opspilot/constants` 为准。
 
-> **状态：本节 5.1–5.x 所列模型类型、供应商、知识来源/文件类型、渠道、工具类目、ChatFlow 节点等枚举均为 GA。** 例外说明：CMDB、monitor 两类工具模块在工具目录中存在但当前未在加载器 `TOOL_MODULES` 中启用（CMDB 已注释临时关闭），不计入可用工具范围（见 5.x 工具节备注）；其余无 Beta/试验项。
+> **状态：本节 5.1–5.x 所列模型类型、供应商、知识来源/文件类型、渠道、工具类目、ChatFlow 节点等枚举均为 GA。** 例外说明：CMDB 工具在工具目录中存在但当前未在加载器 `TOOL_MODULES` 中启用（已注释临时关闭），不计入可用工具范围；monitor 已作为内置工具（builtin）可用，但不经 TOOL_MODULES 加载（见 5.5 备注）；其余无 Beta/试验项。
 
 ### 5.1 模型类型
 
@@ -175,10 +190,11 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 
 ### 5.5 内置可用工具（ToolsLoader 注册类目）
 
-后端 `metis/llm/tools/tools_loader.py` 静态注册以下工具类目（每类含多个具体工具，按 `@tool` 装饰函数发现并写入 SkillTools 表）：
+后端 `metis/llm/tools/tools_loader.py` 静态注册以下工具类目（每类含多个具体工具，按 `StructuredTool` 实例发现并写入 SkillTools 表）：
 
 | 工具类目 | 标识 | 说明 |
 |---|---|---|
+| 工作流附件文件 | `attachment_file` | 生成 Markdown/PDF/Word 附件并返回签名下载链接 |
 | 浏览器代理 | `agent_browser` / `browser_use` | 智能浏览 |
 | 当前时间 | `current_time` | 时间获取 |
 | DuckDuckGo 搜索 | `duckduckgo` | 联网搜索 |
@@ -196,7 +212,11 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | SSH | `ssh` | 远程批量执行/上传 |
 | Python | `python` | 代码执行 |
 
-加载器 `TOOL_MODULES` 实际启用 18 个工具模块键（上表 16 个功能类目，其中浏览器类含 `agent_browser` / `browser_use`、Kubernetes 类含 `kubernetes` / `kubernetes_data_collection` 各为 2 个键）；CMDB、monitor 类目在工具目录中存在但当前未在加载器中启用（CMDB 已在 `TOOL_MODULES` 中注释临时关闭）。
+加载器 `TOOL_MODULES` 实际启用 19 个工具模块键（上表 17 个功能类目，其中浏览器类含 `agent_browser` / `browser_use`、Kubernetes 类含 `kubernetes` / `kubernetes_data_collection` 各为 2 个键）；CMDB 类目在工具目录中存在但当前未在加载器中启用（已在 `TOOL_MODULES` 中注释临时关闭）。
+
+此外，`monitor`（监控查询）作为**内置工具（builtin）**，通过 `build_builtin_monitor_tool` 构建，不经 TOOL_MODULES 注册，而是在智能体技能配置中作为内置选项提供；其 CONSTRUCTOR_PARAMS 需配置 username/password/domain/team_id。monitor 内置工具包含 6 个子工具函数：`monitor_list_objects`、`monitor_list_object_instances`、`monitor_list_object_metrics`、`monitor_list_instance_metrics`、`monitor_query_metric_data`、`monitor_list_active_alerts`。
+
+> 证据来源：server/apps/opspilot/metis/llm/tools/tools_loader.py:31-52（TOOL_MODULES，19 键）、server/apps/opspilot/metis/llm/tools/monitor/__init__.py（monitor 内置工具及 CONSTRUCTOR_PARAMS）、server/apps/opspilot/services/builtin_tools.py（build_builtin_monitor_tool、build_builtin_attachment_file_tool）
 
 ### 5.6 智能体技能类型（SkillTypeChoices）与机器人类型（BotTypeChoice）
 
@@ -216,7 +236,9 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | 记忆（Memory） | memory_read、memory_write |
 | 动作（Actions） | http、notification |
 
-共 6 个分类、17 种节点类型（`constants/chatflow.ts`、`components/studio/chatflowSettings.tsx`）。工作流执行类型（WorkFlowExecuteType）后端枚举 10 种：openai、restful、celery、enterprise_wechat、wechat_official、dingtalk、embedded_chat、web_chat、mobile、agui。
+共 6 个分类、17 种节点类型（`constants/chatflow.ts`、`components/studio/chatflowSettings.tsx`）。工作流执行类型（WorkFlowExecuteType）后端枚举 11 种：openai、restful、celery、enterprise_wechat、wechat_official、dingtalk、embedded_chat、web_chat、mobile、agui、**nats**（新增，用于告警中心 NATS 触发）。
+
+> 证据来源：server/apps/opspilot/enum.py:67-68（WorkFlowExecuteType.NATS）
 
 ### 5.8 对话渠道类型（ChannelChoices）
 
@@ -231,12 +253,12 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 
 共 6 种对话渠道。
 
-> 说明：上述枚举均直接来自源代码常量、模型字段或前端节点库注册，不含演进展望项。工具类目以 ToolsLoader 实际注册为准（`TOOL_MODULES` 启用 18 个模块键、16 个功能类目），目录中存在但未启用的 CMDB / monitor 类不计入；ChatFlow 节点 17 种以前端节点库为准，后端 WorkFlowExecuteType（10 种）为执行入口/渠道层枚举，二者口径不同。
+> 说明：上述枚举均直接来自源代码常量、模型字段或前端节点库注册，不含演进展望项。工具类目以 ToolsLoader 实际注册为准（`TOOL_MODULES` 启用 19 个模块键、17 个功能类目，较上一版本新增 `attachment_file`），目录中存在但未启用的 CMDB 类不计入；monitor 以内置工具形式提供，不经 TOOL_MODULES 注册；ChatFlow 节点 17 种以前端节点库为准，后端 WorkFlowExecuteType（11 种，新增 `nats`）为执行入口/渠道层枚举，二者口径不同。
 
 
 ## 六、枚举与对象取值明细附录
 
-> 本附录列出 OpsPilot 模块的关键枚举与对象取值，取自源码常量定义。共 13 类、84 项取值。
+> 本附录列出 OpsPilot 模块的关键枚举与对象取值，取自源码常量定义。共 16 类（较上一版本新增：工作流执行类型 NATS 条目、知识任务状态、记忆存储引擎类型、工具附件文件类目）。
 
 ### 内置LLM模型
 
@@ -290,11 +312,13 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | Web 对话 | `web_chat` | Web 对话触发执行工作流 |
 | 移动端 | `mobile` | 移动端触发执行工作流 |
 | AG-UI | `agui` | AG-UI 触发执行工作流 |
+| NATS | `nats` | NATS 消息触发执行工作流（告警中心集成） |
 
-### 工具类目
+### 工具类目（TOOL_MODULES 键）
 
 | 枚举项 | 取值 | 中文含义 |
 |---|---|---|
+| attachment_file | `attachment_file` | 工作流附件文件工具（生成 md/pdf/docx 并返回签名下载链接） |
 | agent_browser | `agent_browser` | 智能体浏览器工具 |
 | browser_use | `browser_use` | 浏览器操作工具 |
 | current_time | `current_time` | 当前时间工具 |
@@ -386,3 +410,34 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | 文件 | `file` | 来自上传文件的知识 |
 | 网页 | `web_page` | 来自网页抓取的知识 |
 | 手动 | `manual` | 手动录入的知识 |
+
+### 知识任务状态（KnowledgeTaskStatus）
+
+| 枚举项 | 取值 | 中文含义 |
+|---|---|---|
+| 运行中 | `running` | 知识处理任务运行中 |
+| 成功 | `success` | 知识处理任务成功 |
+| 失败 | `failed` | 知识处理任务失败 |
+
+> 证据来源：server/apps/opspilot/enum.py:80-87（KnowledgeTaskStatus）；用于 knowledge_mgmt 模型的 `task_status` 字段。
+
+### 记忆存储引擎类型（MemorySpace.STORAGE_CHOICES）
+
+| 枚举项 | 取值 | 中文含义 |
+|---|---|---|
+| 本地存储 | `local` | 使用 PostgreSQL 数据库存储记忆（开箱即用，默认） |
+| Mem0 | `mem0` | 使用 Mem0 存储（需安装 mem0 SDK） |
+| Zep | `zep` | 使用 Zep 存储（需安装 zep-cloud SDK） |
+| 自定义 API | `custom` | 使用自定义 HTTP API 存储（需 httpx） |
+
+> 证据来源：server/apps/opspilot/models/memory_mgmt.py（MemorySpace.STORAGE_CHOICES）、server/apps/opspilot/memory/engines/registry.py（check_sdk_availability）
+
+### 工作流附件支持的文件类型（normalize_attachment_file_type）
+
+| 枚举项 | 取值 | MIME 类型 |
+|---|---|---|
+| Markdown | `md` | `text/markdown` |
+| PDF | `pdf` | `application/pdf` |
+| Word 文档 | `docx` / `word` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+
+> 证据来源：server/apps/opspilot/services/workflow_attachment_service.py（ATTACHMENT_FILE_TYPE_CONFIG）；txt、xlsx、csv、html 等格式由前端传入后兜底为通用文件，当前服务端仅上述 3 类有显式生成逻辑。【待确认：txt/csv/html 是否在后续迭代中加入服务端转换】

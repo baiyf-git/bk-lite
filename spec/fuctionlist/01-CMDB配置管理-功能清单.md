@@ -1,9 +1,9 @@
 # CMDB 配置管理 · 功能清单
 
-**文档版本：** V1.1
-**发布日期：** 2026-06-18
+**文档版本：** V1.2
+**发布日期：** 2026-06-22
 **适用范围：** BK-Lite CMDB 配置管理模块
-**编制依据：** CMDB PRD v1.6（2026-06-18）与 `server/apps/cmdb`、`server/apps/rpc/cmdb.py` 源代码核对
+**编制依据：** CMDB PRD v1.6（2026-06-18）与 `server/apps/cmdb`、`server/apps/rpc/cmdb.py` 源代码核对（git diff master..HEAD，基线 master）
 
 ---
 
@@ -30,6 +30,7 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 | 联合唯一规则 | 对单字段或多字段组合设置唯一约束 | 规则生效后实例新增/编辑均须满足唯一约束 | GA |
 | 自动关联规则 | 基于字段匹配在实例间自动建立/刷新关联 | 依附于具体模型关系配置，同一关系可配多条规则；规则变更后触发关系同步 | GA |
 | 模型配置导入导出 | 模型定义的导入导出，用于模板复用与跨环境迁移 | 内容含关系与自动关联规则定义 | GA |
+| 模型与分类排序及可见性 | 超管可通过 `save_layout` 端点批量调整模型分类的显示顺序（`order`）与是否可见（`is_visible`），同时调整模型排序；普通用户只读 | 仅超级管理员可写；`classifications` 与 `models` 须为列表；分类写入失败时自动回滚；来源 `server/apps/cmdb/views/model.py:144`，`server/apps/cmdb/services/classification.py` | GA |
 
 ### 2. 资产管理（实例）
 
@@ -52,12 +53,15 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 | 轻量拓扑 | 以实例为中心查看拓扑，支持按节点继续展开 | 默认先返回首批关系层级，再按需展开下一层 | GA |
 | 变更记录查看 | 查看实例相关变更记录 | — | GA |
 | 配置文件版本 | 查看配置文件列表、版本历史、内容与版本差异（Diff） | 仅面向已启用配置采集并采集到的实例；仅可读取内容的版本支持查看与对比 | GA |
+| 网络拓扑 Tab | 以网络设备实例为中心展开接口级直连拓扑，支持按节点递增展开 | 须为网络设备模型（存在 `interface --belong--> <model>` 的模型关联）；depth 默认 2 跳（钳制 1–4），节点上限 100；须有 `asset_info-View` 权限；端点 `network_topo/<model_id>/<inst_id>`（`server/apps/cmdb/views/instance.py`），主题判定 `server/apps/cmdb/services/topology_theme.py` | GA |
+| 网络拓扑手动调整连线 | 在网络拓扑编辑模式中手动新增/删除设备间连线（端口级 connect 关联）、拖动设备位置、添加画布外设备 | 端口选择支持内联新建端口；已占用端口在下拉中置灰；底层调用 `instance_association_create`/`delete`（`server/apps/cmdb/services/instance.py`）；仅面向网络设备模型拓扑 | GA |
+| 拓扑主题查询 | 查询某模型实例可渲染的拓扑主题列表（如 `["network"]`），前端据此决定显示哪些主题 Tab | 端点 `topo_themes/<model_id>`（`server/apps/cmdb/views/instance.py`）；当前支持主题：`network`（网络设备判定见上） | GA |
 
 ### 4. 资产检索与视图
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 全局全文检索 | 跨模型全文检索资产 | 可配置是否区分大小写 | GA |
+| 全局全文检索 | 跨模型全文检索资产；支持附件/图片字段的文件名主体检索（去路径、去扩展名作为可搜索冗余）；密码类型字段排除出检索索引 | 可配置是否区分大小写；文件名检索仅命中主体词干（如 `report` 命中 `report.pdf`，搜 `pdf`/完整文件名不命中）；来源 `server/apps/cmdb/display_field/handler.py`（`commit facf09566`） | GA |
 | 按模型统计 | 检索结果先按模型汇总命中数，再进入单模型分页查看 | 不依赖单一模型入口 | GA |
 | 常用筛选保存 | 用户保存常用筛选条件并按模型复用 | 保存于用户个人配置，非浏览器本地临时记录 | GA |
 | 资产视图 | 按模型统计资产数量并提供快速跳转入口 | — | GA |
@@ -68,14 +72,19 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 采集对象树 | 按采集对象树查看可采集对象 | 内置约 40 个采集对象，覆盖云、虚拟化、容器、网络、数据库、主机、中间件、配置文件 | GA |
+| 采集对象树 | 按采集对象树查看可采集对象 | 社区版当前树节点：容器（Kubernetes、Docker）、虚拟化（VMware）、网络设备（SNMP+SOID）、主机（Linux/Windows/SSH物理服务器/IPMI）、数据库（MySQL/PostgreSQL/Redis/MSSQL/MongoDB/ES/HBase/InfluxDB）、存储设备（华为 OceanStor，Beta）、云平台（阿里云、腾讯云、华为云 hwcloud、FusionInsight）、中间件（Nginx/Apache/Tomcat/Zookeeper/Kafka/Consul/Etcd/RabbitMQ/ActiveMQ/RocketMQ/IIS/OpenResty/HAProxy/Squid/Tuxedo/Memcached/Spark/MinIO/KeepAlive）、配置文件；AWS/Jetty/WebLogic/JBoss/Ceph/WebSphere/TiDB/DB2/TongWeb 已迁移至商业版包 cmdb_enterprise，社区版不提供采集；来源 `server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE` | GA |
 | 采集任务管理 | 采集任务的新增、编辑、删除、列表与详情 | — | GA |
 | 任务执行 | 手动执行采集任务 | 任务对象可选节点、模型实例、云区域等 | GA |
-| 任务状态汇总 | 查看任务执行状态汇总 | — | GA |
+| 任务状态汇总 | 查看任务执行状态汇总 | 状态共 8 种：未执行（0）、正在采集（1）、成功（2）、异常（3）、超时（4）、正在写入（5）、强制终止（6）、**部分成功（8）**；部分成功表示多目标任务中有成功也有失败，需运维感知；来源 `server/apps/cmdb/constants/constants.py:CollectRunStatusType` | GA |
 | 采集结果摘要 | 查看新增、更新、删除、关联等结果统计 | 各类明细可展开 | GA |
 | 插件说明 | 查看采集插件说明文档 | — | GA |
 | 实例侧关联任务 | 在实例侧查看可关联的采集任务名称 | — | GA |
-| 部分数据库采集 | MongoDB、Elasticsearch、HBase、TiDB、MSSQL 等数据库对象采集 | 部分对象处于试验阶段 | Beta |
+| 采集变更记录自动写入 | 采集新增/更新实例时自动写入变更记录（来源标记为"自动采集"场景） | 无业务字段变化的更新以"核实实例，无字段变化"区分记录；来源 `server/apps/cmdb/collection/change_records.py` | GA |
+| 采集任务多凭据池 | 采集任务支持配置多凭据轮询（凭据池），对每个目标依次尝试直到命中成功 | 含凭据命中状态管理（成功/失败/冷却期）与按 object_key 聚合；来源 `server/apps/cmdb/services/collect_credential_pool_service.py`、`collect_hit_state_service.py`、`collect_dispatch_service.py` | GA |
+| 部分数据库采集 | MongoDB、Elasticsearch、HBase、MSSQL、InfluxDB 等数据库对象采集 | MSSQL/MongoDB/ES/HBase 为 Beta；InfluxDB 为 Beta（协议采集，兼容 1.x/2.x）；TiDB/DB2 已迁移至商业版包 cmdb_enterprise，社区版不提供 | Beta |
+| 存储设备采集 | 采集华为 OceanStor 存储设备及其存储池、磁盘、卷（LUN） | 主对象 storage（设备级）+ 子对象 storage_pool / storage_disk / storage_volume；协议采集（HTTPS）；Beta；来源 `server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py` | Beta |
+| FusionInsight 采集 | 采集华为 FusionInsight 平台及其下集群（fusioninsight_cluster）与主机（fusioninsight_host） | 集群先处理再建主机归属关联；Beta；来源 `server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py` | Beta |
+| 自定义上报（企业版扩展） | 外部系统通过凭据 + API 主动上报配置项数据到 CMDB，无需 Agent 采集 | 社区版为 no-op（门面 `server/apps/cmdb/custom_reporting/extensions.py`）；商业版通过企业扩展注册实现；路由入口 `CustomReportingTaskViewSet`（`server/apps/cmdb/views/custom_reporting.py`） | Beta |
 
 ### 6. SOID 特征库
 
@@ -123,17 +132,19 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 
 字段类型与枚举的单选/多选模式在创建后保持稳定，不支持直接切换。删除模型前必须先清理其实例与关系。配置文件版本能力只面向已采集到的配置文件，且只有可读取内容的版本才支持内容查看与对比。资产详情展示的是轻量拓扑，按需逐层展开，而非一次性加载全量关系。实例导入、批量更新、批量删除均受组织权限约束。订阅规则的管理边界严格按组织范围隔离。
 
+网络拓扑 Tab 仅面向网络设备模型（须存在 `interface --belong--> <model>` 的模型关联），非网络设备模型不展示该 Tab。拓扑 depth 最大 4 跳、节点上限 100，超出截断并提示，不静默丢弃。手动调整连线需在编辑模式下操作，底层创建/删除端口级 connect 关联，已占用端口不可重复选择。模型/分类的排序与可见性调整（`save_layout`）仅超级管理员可写；分类写入失败时自动回滚至先前布局快照。采集多凭据池按 object_key（目标维度）追踪命中状态，成功凭据在冷却期内优先复用；凭据池调整时已成功记录联动清理。自定义上报为企业版扩展能力，社区版 no-op（所有方法返回空值/空列表），商业版通过 `registry.register("custom_reporting", impl)` 注入实现。
+
 机房俯视平面图与机柜正视 U 图均为只读视图，不提供编辑入口；冲突（同格/越界/重叠）仅标记、不阻断写入。布局数据的渲染依赖实例上的内置字段（rack 模型：`row`/`col`/`u_count`；设备模型：`rack_u_start`/`u_size`），字段缺失时对应实例归入"未定位"列单独展示，不被丢弃。两个布局端点均须持有 `asset_info-View` 权限，并按调用方用户的组织范围过滤机柜/设备实例。Neo4j 搜索/过滤路径已参数化（`FORMAT_TYPE_PARAMS` + `ParameterCollector`，server/apps/cmdb/graph/neo4j.py:301），该路径 Cypher 注入风险已消除；写入与按 id 取详情等路径仍为 f-string 拼接（`:197`、`:408`），参数化为局部加固、未覆盖全部查询。
 
 ## 四、平台协同
 
 CMDB 作为统一数据底座，向监控/告警提供资产上下文与责任人信息，向作业管理提供执行目标清单，向 OpsPilot 提供资产与关系的事实数据；自动发现的采集任务由节点管理提供的采集通道（Stargazer / NATS-Executor）执行；订阅与变更通知经系统管理统一配置的通知渠道送达。
 
-CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 10 个），新增第五类能力"实例/模型/关联通用查询与 CRUD"。本轮新增的 10 个 NATS handler 为：`create_instance`（创建实例）、`delete_instance`（删除实例，支持批量）、`list_instances`（分页查询实例）、`search_model_attrs`（查模型属性）、`search_models`（查模型列表）、`search_classifications`（查分类列表）、`search_model_associations`（查模型关联定义）、`search_instance_associations`（查实例关联）、`create_instance_association`（建立实例关联）、`delete_instance_association`（删除实例关联）。其中 8 个在 `apps/rpc/cmdb.py` 提供了 RPC 包装方法供其他模块直接调用（`list_instances`/`search_model_attrs`/`search_models`/`search_classifications`/`search_model_associations`/`search_instance_associations`/`create_instance_association`/`delete_instance_association`）；`create_instance`、`delete_instance` 暂无 RPC 包装方法，仅可经 NATS 主题调用。来源：server/apps/cmdb/nats/nats.py:436-679，server/apps/rpc/cmdb.py:44-94。
+CMDB 通过 NATS handler 对外暴露 25 个函数，覆盖实例/模型/关联查询与 CRUD、统计分析、配置文件与凭据结果接收等能力。相比上一基线新增的 handler 包括：`search_instances_batch`（按 id 或 inst_name 批量查实例，供内部服务调用）、`update_instance`（更新实例字段）、`create_instance`（创建实例）、`delete_instance`（删除实例，支持批量）、`list_instances`（分页查询实例）、`search_model_attrs`（查模型属性）、`search_models`（查模型列表）、`search_classifications`（查分类列表）、`search_model_associations`（查模型关联定义）、`search_instance_associations`（查实例关联）、`create_instance_association`（建立实例关联）、`delete_instance_association`（删除实例关联）、`receive_collect_credential_result`（接收凭据执行结果并回写命中状态）。其中部分 handler 在 `apps/rpc/cmdb.py` 提供了 RPC 包装方法供其他模块直接调用（`list_instances`/`search_model_attrs`/`search_models`/`search_classifications`/`search_model_associations`/`search_instance_associations`/`create_instance_association`/`delete_instance_association`）。来源：server/apps/cmdb/nats/nats.py，server/apps/rpc/cmdb.py。
 
 ## 五、支持的采集对象与内置模型范围
 
-以下为自动发现内置的采集对象（约 40 个，含子对象），以及随平台预置的内置模型；标注【BETA】者为试验状态采集对象。配置项（CI）以内置模型为载体，亦可由用户自定义模型扩展。
+以下为自动发现内置的采集对象与随平台预置的内置模型；标注【BETA】者为试验状态采集对象。配置项（CI）以内置模型为载体，亦可由用户自定义模型扩展。社区版树节点已按 `server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE` 当前代码核对（git diff master..HEAD）；AWS/Jetty/WebLogic/JBoss/Ceph/WebSphere/TiDB/DB2/TongWeb 采集插件已迁商业版包 cmdb_enterprise，不在社区版 `COLLECT_OBJ_TREE` 中列出。
 
 ### 5.1 采集对象（自动发现）
 
@@ -141,25 +152,37 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 |---|---|---|
 | 容器 | Kubernetes（集群/命名空间/工作负载/Pod/节点）、Docker | GA |
 | 虚拟化 | VMware vCenter（vCenter / ESXi 主机 / 虚拟机 / 数据存储） | GA |
-| 网络设备 | 基于 SNMP + SOID 特征库识别的交换机、路由器、防火墙、负载均衡等 | GA |
+| 网络设备 | 基于 SNMP + SOID 特征库识别的交换机、路由器、防火墙、负载均衡等；支持 LLDP/CDP/FDB/ARP 拓扑发现 | GA |
 | 云平台 | 阿里云、腾讯云 | GA |
+| 云平台 | 华为云（hwcloud）：云服务器（ECS）/块存储（EVS）/对象存储（OBS）/VPC/子网/弹性公网 IP（EIP）/安全组（SG）/负载均衡（ELB）/分布式缓存（DCS）/关系型数据库（RDS） | Beta |
+| 云平台 | FusionInsight：平台（fusioninsight）/ 集群（fusioninsight_cluster）/ 主机（fusioninsight_host） | Beta |
+| 云平台（商业版） | ManageOne、OpenStack、SmartX、AWS（已迁移至商业版包 cmdb_enterprise，社区版不提供） | — |
 | 主机 | Linux / Windows 主机（含磁盘、内存、网卡、GPU 等）、配置文件采集、物理服务器（SSH） | GA |
 | 物理服务器（IPMI） | 通过 IPMI 采集物理服务器硬件信息 | Beta |
 | 数据库 | MySQL、PostgreSQL、Redis | GA |
-| 数据库（试验） | MSSQL、MongoDB、Elasticsearch、HBase、TiDB | Beta |
-| 中间件 | Nginx、Apache、Tomcat、Zookeeper、Kafka、Consul、Etcd、RabbitMQ、ActiveMQ、RocketMQ、Jetty、WebLogic、WebSphere、JBoss、IIS、OpenResty、HAProxy、Squid、Tuxedo、Memcached、Ceph、Spark | GA |
+| 数据库（试验） | MSSQL、MongoDB、Elasticsearch、HBase、InfluxDB（协议采集，兼容 1.x/2.x） | Beta |
+| 数据库（商业版） | TiDB、DB2（已迁移至商业版包 cmdb_enterprise，社区版不提供） | — |
+| 存储设备 | 华为 OceanStor：存储设备（storage）/ 存储池（storage_pool）/ 磁盘（storage_disk）/ 卷 LUN（storage_volume） | Beta |
+| 中间件 | Nginx、Apache、Tomcat、Zookeeper、Kafka、Consul、Etcd、RabbitMQ、ActiveMQ、RocketMQ、IIS、OpenResty、HAProxy、Squid、Tuxedo、Memcached、Spark | GA |
+| 中间件 | MinIO（对象存储，Job 采集）、KeepAlive（VRRP/HA 守护进程，model_id 为 `keepalive`） | Beta |
+| 中间件（商业版） | Jetty、WebLogic、WebSphere、JBoss、Ceph、TongWeb（已迁移至商业版包 cmdb_enterprise，社区版不提供） | — |
 
 ### 5.2 内置模型（配置项类型）
 
-平台预置约 40 个内置模型作为开箱即用的配置项类型，按分类组织如下；用户可在其上自定义扩展模型与字段：
+平台预置内置模型作为开箱即用的配置项类型，按分类组织如下；用户可在其上自定义扩展模型与字段。详见 [[../prd/CMDB/自动发现.md#3.1 采集对象树与插件]] 与 [[../ARD/modules/cmdb.md#采集插件]]：
 
 | 模型分类 | 内置模型 |
 |---|---|
 | 主机与硬件 | 主机（host）、物理服务器（physcial_server）、网络设备（network） |
 | 容器与虚拟化 | K8S 集群（k8s_cluster）、Docker（docker）、VMware vCenter（vmware_vc） |
-| 云账号 | 阿里云账号（aliyun_account）、腾讯云（qcloud） |
-| 数据库 | MySQL、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch（es）、HBase、TiDB |
-| 中间件 | Nginx、Apache、Tomcat、Zookeeper、Kafka、Consul、Etcd、RabbitMQ、ActiveMQ、RocketMQ、Jetty、WebLogic、WebSphere、JBoss、IIS、OpenResty、HAProxy、Squid、Tuxedo、Memcached、Ceph、Spark |
+| 云账号 | 阿里云账号（aliyun_account）、腾讯云（qcloud）、华为云（hwcloud，Beta）、FusionInsight（fusioninsight，Beta） |
+| 云资源-华为云 | hwcloud_ecs（云服务器）、hwcloud_evs（块存储）、hwcloud_obs（对象存储）、hwcloud_vpc（VPC）、hwcloud_subnet（子网）、hwcloud_eip（弹性公网 IP）、hwcloud_sg（安全组）、hwcloud_elb（负载均衡）、hwcloud_dcs（分布式缓存）、hwcloud_rds（关系型数据库）（均 Beta） |
+| 云资源-FusionInsight | fusioninsight_cluster（集群，Beta）、fusioninsight_host（主机，Beta） |
+| 数据库 | MySQL、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch（es）、HBase、InfluxDB（Beta） |
+| 数据库（商业版模型，社区版仅模型不采集） | TiDB、DB2（采集能力已迁移至商业版包 cmdb_enterprise） |
+| 存储设备 | storage（华为 OceanStor 存储设备，Beta）、storage_pool（存储池，Beta）、storage_disk（物理磁盘，Beta）、storage_volume（卷/LUN，Beta） |
+| 中间件 | Nginx、Apache、Tomcat、Zookeeper、Kafka、Consul、Etcd、RabbitMQ、ActiveMQ、RocketMQ、IIS、OpenResty、HAProxy、Squid、Tuxedo、Memcached、Spark、MinIO（Beta）、keepalive（Beta，即原 keepalived，model_id 已重命名） |
+| 中间件（商业版模型，社区版仅模型不采集） | Jetty、WebLogic、WebSphere、JBoss、Ceph、TongWeb（采集能力已迁移至商业版包 cmdb_enterprise） |
 | 配置文件 | 配置文件（config_file） |
 | 机房与机柜 | 机房（server_room）、机柜（rack） |
 
@@ -175,10 +198,12 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 
 > 说明：采集对象与内置模型基本一一对应——采集对象负责把资产数据写入对应模型形成配置项实例。内置模型的属性字段、关系与唯一规则均可由用户按需调整或新增。机房/机柜为管理类模型，不对应自动采集对象，字段由人工录入或导入维护。
 
+> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/__init__.py`，`server/apps/cmdb/node_configs/cloud/`，`server/apps/cmdb/constants/constants.py`，`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`，`server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py`，`server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py`，`server/apps/cmdb/collection/plugins/community/middleware/minio.py`，`server/apps/cmdb/collection/plugins/community/protocol/influxdb.py`　|　同步基线：master..HEAD（2026-06-22）　|　【已实现/已存在】
+
 
 ## 六、采集配置项（字段）明细（逐项）
 
-> 本节逐项列出 CMDB 各采集对象（内置模型）可采集 / 维护的配置项字段，源自内置模型定义 `model_config.xlsx`。共 64 个对象、800 个字段；字段标识为模型属性 `field_id`，中文含义为属性名称口径。用户可在内置模型上自定义扩展字段。
+> 本节逐项列出 CMDB 各采集对象（内置模型）可采集 / 维护的配置项字段，源自内置模型定义 `model_config.xlsx` 与社区版采集插件 `field_mapping`。字段标识为模型属性 `field_id`，中文含义为属性名称口径。用户可在内置模型上自定义扩展字段。本轮（master..HEAD）新增：InfluxDB（数据库，Beta）、MinIO（中间件，Beta）、华为 OceanStor 存储设备（storage/storage_pool/storage_disk/storage_volume，Beta）、FusionInsight（fusioninsight_cluster/fusioninsight_host，Beta）；keepalived 已重命名为 keepalive（字段不变）；以下各节按新增对象追加，其余既有条目不变。
 
 ### 主机与硬件
 
@@ -310,6 +335,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 ### 数据库
 
 #### DB2（模型 `db2` · 12 字段）
+
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
 
 | 字段标识 | 中文含义 |
 |---|---|
@@ -463,6 +490,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 
 #### TiDB（模型 `tidb` · 11 字段）
 
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
+
 | 字段标识 | 中文含义 |
 |---|---|
 | `inst_name` | 实例名称（CMDB 中的唯一展示名） |
@@ -510,6 +539,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `include` | 包含的子配置 |
 
 #### Ceph（模型 `ceph` · 9 字段）
+
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
 
 | 字段标识 | 中文含义 |
 |---|---|
@@ -588,6 +619,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 
 #### JBoss（模型 `jboss` · 9 字段）
 
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
+
 | 字段标识 | 中文含义 |
 |---|---|
 | `inst_name` | 实例名称（CMDB 中的唯一展示名） |
@@ -601,6 +634,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `config_file` | 配置文件 |
 
 #### Jetty（模型 `jetty` · 11 字段）
+
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
 
 | 字段标识 | 中文含义 |
 |---|---|
@@ -638,7 +673,7 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `socket_request_max_bytes` | Socket 单请求最大字节 |
 | `socket_send_buffer_bytes` | Socket 发送缓冲区(字节) |
 
-#### Keepalived（模型 `keepalived` · 10 字段）
+#### KeepAlive（模型 `keepalive` · 10 字段，**原 model_id 为 `keepalived`，已重命名**）
 
 | 字段标识 | 中文含义 |
 |---|---|
@@ -772,6 +807,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 
 #### TongWeb（模型 `tongweb` · 11 字段）
 
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
+
 | 字段标识 | 中文含义 |
 |---|---|
 | `inst_name` | 实例名称（CMDB 中的唯一展示名） |
@@ -806,6 +843,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 
 #### WebLogic（模型 `weblogic` · 14 字段）
 
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
+
 | 字段标识 | 中文含义 |
 |---|---|
 | `inst_name` | 实例名称（CMDB 中的唯一展示名） |
@@ -824,6 +863,8 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `java_version` | Java 版本 |
 
 #### WebSphere（模型 `websphere` · 15 字段）
+
+> **商业版采集对象，社区版仅保留模型定义，不提供采集插件**（采集能力已迁移至商业版包 cmdb_enterprise）【已下线 @0fbb99c25】
 
 | 字段标识 | 中文含义 |
 |---|---|
@@ -1040,6 +1081,179 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `charge_type` | 计费方式 |
 | `create_time` | 创建时间 |
 | `assos` | 关联关系（自动建立的关联实例） |
+
+### 云资源-华为云（Beta）
+
+> 华为云采集对象标识由 huaweicloud 重命名为 hwcloud；以下子对象均为 Beta 状态，字段以 `collection/plugins/community/cloud/hwcloud.py` field_mappings 为准。
+
+#### 华为云账号（模型 `hwcloud` · 1 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `endpoint` | API 接入端点 |
+
+#### 华为云云服务器 ECS（模型 `hwcloud_ecs` · 17 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `ip_addr` | IP 地址 |
+| `public_ip` | 公网 IP |
+| `region` | 地域 |
+| `zone` | 可用区 |
+| `vpc` | 所属 VPC |
+| `status` | 运行状态 |
+| `instance_type` | 实例类型/规格 |
+| `os_name` | 操作系统名称 |
+| `vcpus` | 虚拟 CPU 数 |
+| `memory_mb` | 内存大小（MB） |
+| `charge_type` | 计费方式 |
+| `create_time` | 创建时间 |
+| `expired_time` | 到期时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云块存储 EVS（模型 `hwcloud_evs` · 12 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `disk_size` | 磁盘大小（GB） |
+| `disk_type` | 磁盘类型 |
+| `category` | 类别 |
+| `status` | 运行状态 |
+| `charge_type` | 计费方式 |
+| `zone` | 可用区 |
+| `region` | 地域 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云对象存储 OBS（模型 `hwcloud_obs` · 7 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `bucket_type` | 存储桶类型 |
+| `region` | 地域 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云 VPC（模型 `hwcloud_vpc` · 8 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `status` | 运行状态 |
+| `cidr` | CIDR 网段 |
+| `is_default` | 是否默认 VPC |
+| `region` | 地域 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云子网（模型 `hwcloud_subnet` · 9 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `status` | 运行状态 |
+| `cidr` | CIDR 网段 |
+| `gateway` | 网关地址 |
+| `zone` | 可用区 |
+| `region` | 地域 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云弹性公网 IP（模型 `hwcloud_eip` · 10 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `ip_addr` | IP 地址 |
+| `status` | 运行状态 |
+| `bandwidth` | 带宽（Mbps） |
+| `charge_type` | 计费方式 |
+| `region` | 地域 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云安全组（模型 `hwcloud_sg` · 6 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `is_default` | 是否默认安全组 |
+| `region` | 地域 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云负载均衡 ELB（模型 `hwcloud_elb` · 10 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `status` | 运行状态 |
+| `ip_version` | IP 版本（IPv4/IPv6） |
+| `ipv6_addr` | IPv6 地址 |
+| `charge_type` | 计费方式 |
+| `region` | 地域 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云关系型数据库 RDS（模型 `hwcloud_rds` · 18 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `ip_addr` | IP 地址 |
+| `public_ip` | 公网 IP |
+| `status` | 运行状态 |
+| `db_type` | 数据库类型 |
+| `engine` | 引擎类型 |
+| `engine_version` | 引擎版本 |
+| `volume_type` | 卷类型 |
+| `volume_size` | 卷大小（GB） |
+| `vcpus` | 虚拟 CPU 数 |
+| `memory_gb` | 内存大小（GB） |
+| `port` | 端口号 |
+| `region` | 地域 |
+| `charge_type` | 计费方式 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+#### 华为云分布式缓存 DCS（模型 `hwcloud_dcs` · 14 字段）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `resource_name` | 云资源名称 |
+| `resource_id` | 云资源唯一 ID |
+| `ip_addr` | IP 地址 |
+| `port` | 端口号 |
+| `status` | 运行状态 |
+| `engine` | 引擎类型 |
+| `engine_version` | 引擎版本 |
+| `capacity_gb` | 容量（GB） |
+| `cache_mode` | 缓存模式 |
+| `charge_type` | 计费方式 |
+| `region` | 地域 |
+| `create_time` | 创建时间 |
+| `assos` | 关联关系（自动建立的关联实例） |
+
+> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`（field_mappings），`server/apps/cmdb/node_configs/cloud/hwcloud.py`，`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py`　|　同步基线：0fbb99c25　|　【已实现/已存在】
 
 ### 云资源-腾讯云
 
@@ -1311,3 +1525,142 @@ CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 1
 | `type` | 类型 |
 | `isp` | 运营商 |
 | `charge_type` | 计费方式 |
+
+### 数据库（新增）
+
+#### InfluxDB（模型 `influxdb` · 12 字段，Beta）
+
+> 协议采集，兼容 InfluxDB 1.x/2.x，优先 2.x；来源：`server/apps/cmdb/collection/plugins/community/protocol/influxdb.py`
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `ip_addr` | IP 地址 |
+| `port` | 端口号 |
+| `version` | 版本号 |
+| `data_dir` | 数据目录 |
+| `wal_dir` | WAL 目录 |
+| `meta_dir` | 元数据目录 |
+| `engine` | 存储引擎类型 |
+| `http_bind_address` | HTTP 监听地址 |
+| `auth_enabled` | 是否启用认证 |
+| `https_enabled` | 是否启用 HTTPS |
+| `max_concurrent_queries` | 最大并发查询数 |
+
+### 中间件（新增）
+
+#### MinIO 对象存储（模型 `minio` · 11 字段，Beta）
+
+> Job 采集（Linux），对齐 Nginx/Kafka 采集模式；来源：`server/apps/cmdb/collection/plugins/community/middleware/minio.py`
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `ip_addr` | IP 地址 |
+| `port` | API 端口号 |
+| `version` | 版本号 |
+| `bin_path` | 可执行文件路径 |
+| `data_path` | 数据目录（volumes） |
+| `conf_path` | 配置文件路径 |
+| `console_port` | 控制台端口 |
+| `deploy_mode` | 部署模式（单节点/分布式） |
+| `region` | 默认 region |
+| `start_args` | 启动参数 |
+
+### 存储设备（新增）
+
+> 华为 OceanStor 存储采集，Beta；来源：`server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py`
+
+#### 华为存储设备（模型 `storage` · 14 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `device_sn` | 设备序列号 |
+| `model` | 设备型号 |
+| `brand` | 厂商品牌 |
+| `storage_type` | 存储类型 |
+| `firmware_version` | 固件版本 |
+| `sys_desc` | 系统描述 |
+| `total_capacity` | 总容量（GB） |
+| `used_capacity` | 已用容量（GB） |
+| `available_capacity` | 可用容量（GB） |
+| `pool_count` | 存储池数量 |
+| `disk_count` | 磁盘数量 |
+| `volume_count` | 卷数量 |
+| `running_status` | 运行状态 |
+
+#### 华为存储池（模型 `storage_pool` · 8 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `self_device` | 所属存储设备 |
+| `assos` | 关联关系（belong storage） |
+| `pool_type` | 存储池用途类型 |
+| `total_capacity` | 总容量（GB） |
+| `used_capacity` | 已用容量（GB） |
+| `available_capacity` | 可用容量（GB） |
+| `running_status` | 运行状态 |
+
+#### 华为物理磁盘（模型 `storage_disk` · 11 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `self_device` | 所属存储设备 |
+| `assos` | 关联关系（belong storage） |
+| `slot` | 磁盘槽位（LOCATION） |
+| `disk_vendor` | 磁盘厂商 |
+| `disk_model` | 磁盘型号 |
+| `disk_type` | 磁盘类型 |
+| `disk_capacity` | 磁盘容量（GB） |
+| `disk_sn` | 磁盘序列号 |
+| `rotate_speed` | 转速（RPM） |
+| `running_status` | 运行状态 |
+
+#### 华为卷/LUN（模型 `storage_volume` · 9 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（CMDB 中的唯一展示名） |
+| `self_device` | 所属存储设备 |
+| `assos` | 关联关系（belong storage + belong storage_pool） |
+| `parent_pool` | 所属存储池名称 |
+| `wwn` | 卷 WWN |
+| `volume_capacity` | 卷容量（GB） |
+| `alloc_capacity` | 已分配容量（GB） |
+| `alloc_type` | 分配类型 |
+| `running_status` | 运行状态 |
+
+### 云资源-FusionInsight（新增）
+
+> Beta；来源：`server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py`
+
+#### FusionInsight 平台（模型 `fusioninsight` · 无独立字段，仅作关联锚点）
+
+> 平台对象无业务字段，仅用于承载集群的 belong 关联；inst_name 即采集任务实例名。
+
+#### FusionInsight 集群（模型 `fusioninsight_cluster` · 4 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（resource_name + resource_id 拼接） |
+| `assos` | 关联关系（belong fusioninsight） |
+| `resource_name` | 集群名称 |
+| `resource_id` | 集群唯一 ID |
+
+#### FusionInsight 主机（模型 `fusioninsight_host` · 10 字段，Beta）
+
+| 字段标识 | 中文含义 |
+|---|---|
+| `inst_name` | 实例名称（resource_name + resource_id 拼接） |
+| `assos` | 关联关系（belong fusioninsight_cluster） |
+| `resource_name` | 主机名称 |
+| `resource_id` | 主机唯一 ID |
+| `ip_addr` | IP 地址 |
+| `vcpus` | 虚拟 CPU 数 |
+| `memory_mb` | 内存大小（MB） |
+| `storage_gb` | 存储大小（GB） |
+| `status` | 运行状态 |
+| `os_name` | 操作系统名称 |

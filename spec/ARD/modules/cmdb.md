@@ -90,13 +90,17 @@
 ### 采集插件【已实现/已存在】
 采集能力分两层：`collection/collect_plugin/` 下的采集映射实现（Python 文件），与 `constants/constants.py` 中面向 UI 的插件目录（`COLLECTION_METRICS` 分组，含 Beta 标记，部分条目由 Stargazer 以 JOB/PROTOCOL 驱动，无独立映射文件）。
 
+本轮对采集对象集合做了收敛：中间件侧移除 Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere，数据库侧移除 DB2/TiDB，达梦（DaMeng）去除社区重复注册——上述对象均已迁移至商业版包 `cmdb_enterprise`（未入库），社区包不再注册其插件与 node_configs 条目。证据：`collection/plugins/community/middleware/__init__.py`、`node_configs/ssh/`、`node_configs/databases/`、commit c85ac0d43。
+
 - **协议 / 网络**：SNMP/SSH、网络拓扑（LLDP/CDP/FDB/ARP）（`network.py`、`topology/`、`protocol.py`）。
-- **云平台**（constants.py:488-562）：阿里云、腾讯云（`qcloud.py`，id=`qcloud`，目录中仅此一项，不存在独立 Tencent 插件）、华为云、ManageOne、OpenStack、SmartX、FusionInsight（`aliyun.py`/`qcloud.py`/`hwcloud.py`/`manageone.py`/`openstack.py`/`smartx.py`/`fusioninsight.py`）。
+- **云平台**（constants.py:482-520）：社区侧云平台采集仅保留 阿里云（`aliyun.py`，id=`aliyun_account`）、腾讯云（`qcloud.py`，id=`qcloud`）、华为云（`hwcloud.py`，id=`hwcloud`，Beta）、FusionInsight（`fusioninsight.py`，Beta）、OceanStor（`oceanstor.py`）；AWS/ManageOne/OpenStack/SmartX 已迁移至商业版包 `cmdb_enterprise`（未入库），社区包不再注册其插件与 node_configs 条目。华为云采集已由 `huaweicloud` 重命名为 `hwcloud`（`supported_model_id=hwcloud`，Stargazer plugin_name 仍为 `huaweicloud_info`），并在 ECS/platform 基础上增量采集 EVS（块存储）/OBS（对象存储）/VPC/subnet（子网）/EIP（弹性公网 IP）/SG（安全组）/ELB（负载均衡）/DCS（分布式缓存）/RDS（关系型数据库）等子对象，单资源采集失败不影响其余子对象写入。[[../../prd/CMDB/自动发现.md#3.1 采集对象树与插件]]
 - **容器 / 虚拟化**（constants.py:318-359）：K8s、Docker（`k8s.py`）；VMware vCenter（`vmware.py`）。目录中无 Hyper-V 条目，亦无 hyperv 插件文件。
-- **存储设备**（constants.py:472-485，近期新增 git 640548eab）：华为存储 OceanStor（`oceanstor.py`），对象树 `storage_device→storage`，采集存储设备/存储池/磁盘/卷（LUN），主对象 `storage`，子对象 `storage_pool/storage_disk/storage_volume`，复用云家族机制（`oceanstor.py:17-19`）。
-- **数据库**（constants.py:376-471）：MySQL、InfluxDB、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch、HBase、TiDB（实现集中于 `databases.py`）。目录与映射中均无 Oracle 条目。
-- **中间件**（constants.py:611-855）：Nginx、MinIO、Zookeeper、Kafka、Tomcat、Jetty、WebLogic、KeepAlive、Spark（id=`spark`，constants.py:846）等共 20+ 项，多为 JOB 驱动。目录中无 Hadoop 条目；大数据相关现仅 Spark（中间件分组）与 FusionInsight（云平台分组）。
-- **配置文件采集**（task_type=`config_file`，constants.py:578）：由 Stargazer 采集后经 NATS `receive_config_file_result`(nats.py:417) 回传，落库为 `ConfigFileVersion`，内容存 MinIO。
+- **存储设备**（constants.py:462-477）：华为存储 OceanStor（`oceanstor.py`），对象树 `storage_device→storage`，采集存储设备/存储池/磁盘/卷（LUN），主对象 `storage`，子对象 `storage_pool/storage_disk/storage_volume`，复用云家族机制（`oceanstor.py:17-19`）。
+- **数据库**（constants.py:377-461）：MySQL、InfluxDB、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch、HBase（实现集中于 `databases.py`）。TiDB/DB2 已迁移至商业版包（未入库），社区包不再注册。目录与映射中均无 Oracle 条目。
+- **中间件**（constants.py:572-765）：Nginx、MinIO、Zookeeper、Kafka、Tomcat、KeepAlive、Spark（id=`spark`，constants.py:756）等，多为 JOB 驱动。Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere 已迁移至商业版包（未入库）。目录中无 Hadoop 条目；大数据相关现仅 Spark（中间件分组）与 FusionInsight（云平台分组）。
+- **配置文件采集**（task_type=`config_file`，constants.py:538）：由 Stargazer 采集后经 NATS `receive_config_file_result`(nats.py:680) 回传，落库为 `ConfigFileVersion`，内容存 MinIO。
+
+> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/__init__.py`（仅 aliyun/qcloud/hwcloud/fusioninsight/oceanstor）；`server/apps/cmdb/node_configs/cloud/`（仅 aliyun/qcloud/hwcloud/fusioninsight/vmware）；`server/apps/cmdb/constants/constants.py`（云平台目录仅 aliyun_account/qcloud/hwcloud/fusioninsight）；`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py:39-186`　|　同步基线：0fbb99c25　|　【已实现/已存在】
 
 ## 6. 风险 / 待确认
 - 双图库后端按 `FALKORDB_HOST` 环境变量在运行期单选（`graph/drivers/graph_client.py:46-52`），非并存；切换条件已明确【已实现/已存在】。
@@ -104,4 +108,4 @@
 - 凭据加密密钥管理与轮转策略【待确认】。
 
 ## 7. 证据来源
-`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/oceanstor.py,constants/constants.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,views/instance.py:1030-1072,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`。
+`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/oceanstor.py,collection/plugins/community/cloud/{aliyun,qcloud,hwcloud,fusioninsight,oceanstor}.py,constants/constants.py,node_configs/cloud/{aliyun,qcloud,hwcloud,fusioninsight,vmware}.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,views/instance.py:1030-1072,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py`。

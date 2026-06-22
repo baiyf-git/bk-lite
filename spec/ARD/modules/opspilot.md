@@ -25,7 +25,7 @@ AI 助手平台：RAG 检索增强、知识库管理、Bot 编排、LLM 厂商�
 
 | 模型 | 行 | 说明 |
 |------|----|------|
-| Bot / BotChannel | `:22,70` | Bot（Rasa 模型/技能/渠道/部署）、渠道（GitLab/钉钉/企微/企微机器人/公众号，渠道密钥加密） |
+| Bot / BotChannel | `:22,70` | Bot（Rasa 模型/技能/渠道/部署/管理组织 team/使用组织 usage_team）、渠道（GitLab/钉钉/企微/企微机器人/公众号，渠道密钥加密）。管理组织 team 与使用组织 usage_team 分离，恒满足不变式 team ⊆ usage_team（管理组织天然具备使用权）；存量数据由迁移 0058 回填 usage_team=team。 |
 | BotConversationHistory | `:172` | Bot 对话历史（用户/机器人角色、引用知识、通道用户） |
 | ConversationTag | `:189` | 对话标注（问题/答案关联到知识库与文档） |
 | RasaModel | `:200` | Rasa 模型文件（MinIO `munchkin-private`） |
@@ -33,9 +33,11 @@ AI 助手平台：RAG 检索增强、知识库管理、Bot 编排、LLM 厂商�
 | BotWorkFlow | `:256` | 机器人工作流（flow/web JSON，保存时同步 ChatApplication） |
 | ChatApplication | `:421` | 聊天应用（按工作流入口节点自动生成，mobile/web_chat 两类） |
 | WorkflowAttachmentAsset | `:290` | 工作流附件资产（关联 FileKnowledge，下载令牌、execution/attachment 去重约束） |
-| WorkFlowTaskResult | `:278` | 工作流执行主记录（执行实例、状态、输入/输出） |
+| WorkFlowTaskResult | `:278` | 工作流执行主记录（执行实例、状态、输入/输出、is_test 区分配置页测试执行与真实对话执行，带 db_index） |
 | WorkFlowTaskNodeResult | `:325` | 工作流节点执行明细（节点输入/输出、状态、耗时） |
 | WorkFlowConversationHistory | `:361` | ChatFlow 对话历史（用户输入 + 系统输出两条/次，入口类型分流，定时触发不记录） |
+
+> 证据来源：server/apps/opspilot/models/bot_mgmt.py:22-29（Bot.team/usage_team）,282,292（WorkFlowTaskResult.is_test）、migrations/0057_workflowtaskresult_is_test.py、migrations/0058_bot_usage_team.py　|　同步基线：0fbb99c25　|　【已实现】
 
 **知识库子域（`models/knowledge_mgmt.py`）**
 
@@ -65,6 +67,19 @@ AI 助手平台：RAG 检索增强、知识库管理、Bot 编排、LLM 厂商�
 
 ## 3. 接口【已实现/已存在】
 `model_provider_mgmt/*`、`bot_mgmt/*`（含 OpenAI 兼容 `/v1/chat/completions`、`/lobe_chat/v1/chat/completions`）、`channel_mgmt/*`、`knowledge_mgmt/*`、`memory_mgmt/*`。
+
+**鉴权口径（`bot_mgmt/*` 相关）**
+
+- **对话入口（execute_chat_flow）按角色分流鉴权**：真实对话按【使用组织 usage_team】作用域解析可访问 Bot；测试执行（is_test=True）仅【管理组织 team】成员可发起，被授权使用组织不可触发测试。current_team 优先从 API-Key 注入属性读取，回退 cookie。
+  > 证据来源：server/apps/opspilot/views.py:645-661　|　同步基线：0fbb99c25　|　【已实现】
+- **Bot 使用组织授权接口**（DRF @action，既有 bot viewset 下，无新增路由组）：管理组织可授权其它组织对该 Bot 发起对话但不授予管理权；强制并入管理组织 team（管理组织不可被移除）；授权额外使用组织需单独校验当前用户对目标组织的权限。
+  > 证据来源：server/apps/opspilot/viewsets/bot_view.py:216-243　|　同步基线：0fbb99c25　|　【已实现】
+- **submit_approval / submit_choice 收紧鉴权**：由原匿名访问（api_exempt）改为要求【有效 API Token + execution_id 归属当前 team 的 Bot】双重校验，拒绝跨组织或匿名提交。
+  > 证据来源：server/apps/opspilot/views.py:788-868　|　同步基线：0fbb99c25　|　【已实现】
+- **工作流执行结果 / 节点查询 / 对话历史详情**：统一经当前 team 作用域 queryset 重鉴权，越权或资源不存在均返回 404，防跨租户枚举与 IDOR。
+  > 证据来源：server/apps/opspilot/viewsets/workflow_task_result_view.py:44-115、viewsets/history_view.py:158-161　|　同步基线：0fbb99c25　|　【已实现】
+
+> 上述均为既有 app 内 endpoint 行为/鉴权调整，未改路由组/前缀/open_api 范围。
 
 ## 4. AI / RAG 集成【已实现/已存在】
 - LangChain（`langchain_core.messages`）；`metis/llm/` 引擎（分块：fixed/semantic/recursive；embedding manager）。
