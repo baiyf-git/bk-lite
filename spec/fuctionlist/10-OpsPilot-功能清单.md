@@ -1,9 +1,9 @@
 # OpsPilot 智能运维助手 · 功能清单
 
 **文档版本：** V1.2
-**发布日期：** 2026-06-22
+**发布日期：** 2026-06-23
 **适用范围：** BK-Lite OpsPilot 智能运维助手模块
-**编制依据：** OpsPilot PRD v1.1（2026-05-28）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对；增量更新基于 rogerly 分支（git diff master..HEAD -- server/apps/opspilot，核对日期 2026-06-22）
+**编制依据：** OpsPilot PRD v1.1（2026-05-28）、工作台 PRD（同步基线 0fbb99c2）与 `server/apps/opspilot`、`web/src/app/opspilot` 源代码核对；增量更新基于 rogerly 分支（git diff master..HEAD -- server/apps/opspilot，核对日期 2026-06-23）
 
 ---
 
@@ -88,20 +88,23 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 应用机器人管理 | 应用机器人列表管理与上线 / 下线 | 上线后可对外服务，下线后停止对外响应；支持管理组织（team）/ 使用组织（usage_team）分离，不变式 team⊆usage_team，管理组织恒含于使用组织；授权接口 `POST /api/proxy/opspilot/bot_mgmt/bot/{id}/authorize_usage_team/` 可扩充使用组织 | GA |
+| 应用机器人管理 | 应用机器人列表管理与上线 / 下线；列表按**管理组织**（team）过滤，使用组织不可在工作台查看 | 上线后可对外服务，下线后停止对外响应；仅管理组织成员可见与操作 | GA |
+| 机器人二级授权模型 | 机器人同时维护「管理组织」（team）与「使用组织」（usage_team）两个维度的授权 | 管理组织：可在工作台查看 / 编辑 / 删除 / 授权；使用组织：仅可调用对话接口，不可管理；不变式 team ⊆ usage_team，管理组织恒并入使用组织且不可删除（`bot_mgmt.py:25-29`） | GA |
+| 对外授权使用组织 | 管理组织可将机器人对话权开放给其它组织，被授权组织仅获得对话权、不获得管理权 | 请求体传入期望的完整 usage_team 列表，后端强制并入 team；仅可新增调用方自身有权限的组织（`bot_view.py:216-244`）；接口 `POST /api/proxy/opspilot/bot_mgmt/bot/{id}/authorize_usage_team/` | GA |
 | 应用类型 | 支持三类应用 | Pilot、LobeChat、ChatFlow | GA |
 | ChatFlow 画布编排 | ChatFlow 画布编排与节点配置 | 应用由工作流保存时自动同步，不通过应用接口直接创建 | GA |
 | 节点类别 | ChatFlow 支持的节点类别 | 触发、应用、智能体、记忆、逻辑判断（条件/意图分类）、动作（HTTP/通知）等 | GA |
 | 节点执行测试 | 节点执行测试与执行过程查看 | 节点状态：pending/running/completed/failed | GA |
+| 节点业务失败传播 | 同步执行链（Celery/NATS/第三方渠道等非流式路径）下，节点以带内 `{"success": False}` 表达的业务失败会被正确判为失败 | 失败结果不再被当作正常回复回传、任务不再被误记为成功（`node_runner.py:198-213`） | GA |
 | 执行测试隔离 | 配置页测试执行与真实对话执行相互隔离 | 仅 is_test=True 的运行中执行回填配置画布（WorkFlowTaskResult.is_test 字段区分）；测试并发守卫只计测试执行（同一机器人同时仅一个活跃测试执行）；被授权使用组织不可发起测试 | GA |
 | 流程中断与提交 | 执行流程中断、审批提交与选择提交 | 任务状态：running/interrupt_requested/interrupted/success/fail；审批提交/选择提交需有效 API Token 且 execution_id 归属调用者组织 | GA |
-| 执行与会话日志 | 执行日志检索、会话日志查看、输出数据查看 | 主任务与节点级结果均保留；执行日志/节点结果/对话历史详情均按调用者组织作用域返回，越权返回 404 | GA |
+| 执行与会话日志 | 执行日志检索、会话日志查看、输出数据查看；支持按「是否测试执行」过滤 | 主任务与节点级结果均保留；`is_test` 字段随结果返回；执行日志/节点结果/对话历史详情均按调用者组织作用域返回，越权返回 404 | GA |
 | NATS 触发节点同步 | ChatFlow 发布时，workflow 中 type=nats 的触发节点自动同步为 system_mgmt 中的 NATS 通道 | 通道名 `{bot名} - {节点label}`，config 中携带 source="opspilot"/bot_id/node_id；删除应用时自动清理托管通道 | GA |
 | 工作流附件文件 | 工作流执行中可生成可下载的附件文件并通过签名 URL 分发 | 支持格式：md、pdf、docx/word；附件存储到 MinIO，签名 URL 默认有效期 24 小时（可配置 WORKFLOW_ATTACHMENT_DOWNLOAD_MAX_AGE）；Celery Beat 在每日 03:00 清理 3 天前的附件 | GA |
 | 统计视图 | 会话量、活跃用户、Token 消耗等统计 | — | GA |
 | 操作日志 | 工作台、渠道、记忆空间、知识图谱等资源的 CRUD 操作自动写入平台操作日志 | 通过 log_operation 统一记录，涵盖新增/编辑/删除/启动/停止操作 | GA |
 
-> 证据来源：server/apps/opspilot/models/bot_mgmt.py（usage_team 字段、WorkflowAttachmentAsset 模型）、viewsets/bot_view.py（_merge_usage_team、authorize_usage_team、UPDATABLE_FIELDS）、services/nats_channel_sync.py、services/workflow_attachment_service.py、config.py（cleanup-expired-workflow-attachments Beat 任务）、viewsets/channel_view.py、viewsets/memory_view.py、viewsets/knowledge_graph_view.py　|　同步基线：rogerly 分支 2026-06-22　|　【已实现】
+> 证据来源：server/apps/opspilot/models/bot_mgmt.py（usage_team 字段、WorkflowAttachmentAsset 模型）、viewsets/bot_view.py（_merge_usage_team、authorize_usage_team、UPDATABLE_FIELDS）、services/nats_channel_sync.py、services/workflow_attachment_service.py、config.py（cleanup-expired-workflow-attachments Beat 任务）、viewsets/channel_view.py、viewsets/memory_view.py、viewsets/knowledge_graph_view.py、utils/chat_flow_utils/engine/node_runner.py:198-213（节点业务失败传播）　|　同步基线：rogerly 分支 2026-06-23　|　【已实现】
 > 参见：[[../ARD/modules/opspilot.md#3-接口]]、[[../prd/OpsPilot/工作台.md#4-关键规则]]
 
 ### 7. 渠道与会话
@@ -121,10 +124,12 @@ OpsPilot 是 BK-Lite 的智能应用构建与运营平台，提供从基础模�
 |---|---|---|---|
 | OpenAI 风格接口 | OpenAI 风格聊天补全接口 | — | GA |
 | LobeChat 兼容接口 | LobeChat 兼容聊天补全接口 | — | GA |
-| ChatFlow 执行接口 | 按 bot_id / node_id 执行 ChatFlow | — | GA |
+| ChatFlow 执行接口 | 按 bot_id / node_id 执行 ChatFlow；鉴权与 bot 可见范围按调用场景区分 | 正常对话（is_test=false）：按**使用组织**（usage_team）放行，含 OpsPilotGuest 访客组；配置页测试（is_test=true）：仅**管理组织**（team）可发起，同一机器人同时仅允许一个测试执行（`views.py:646-708`） | GA |
 | 企业渠道触发 | 企业微信、微信公众号、钉钉触发入口 | — | GA |
 | NATS 触发入口 | 由告警中心通过 NATS 消息触发 OpsPilot ChatFlow workflow | NATS API `trigger_workflow_by_nats`；team 限单组织 ID；执行类型记为 `nats`；入参校验完整（message/team/user_ids/bot_id/node_id）| GA |
 | 工作流执行类型 | 支持的工作流执行类型 | 共 11 种：OpenAI、RESTful、Celery（定时）、企业微信、微信公众号、钉钉、嵌入式对话、Web、Mobile、AG-UI、NATS | GA |
+| 人机协同审批接口 | 提交审批决策（submit_approval），用户对智能体危险操作进行批准 / 拒绝 | 必须携带有效 API Token；校验 execution_id 归属调用方所在组织的 Bot，跨组织伪造决策返回 404（`views.py:790`） | GA |
+| 人机协同选择接口 | 提交用户选择（submit_choice），用户从多个选项中做出选择 | 必须携带有效 API Token；同上归属校验，拒绝跨组织劫持他人工作流选择（`views.py:855`） | GA |
 | 工作流附件下载 | 工作流执行生成的附件通过签名 URL 下载 | `GET /api/proxy/opspilot/bot_mgmt/workflow_attachment/download/{token}/`；Token 绑定 aid+eid，TimestampSigner 签名防猜测与越权；默认 24 小时有效期 | GA |
 
 ## 三、能力边界与约束
@@ -236,7 +241,7 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | 记忆（Memory） | memory_read、memory_write |
 | 动作（Actions） | http、notification |
 
-共 6 个分类、17 种节点类型（`constants/chatflow.ts`、`components/studio/chatflowSettings.tsx`）。工作流执行类型（WorkFlowExecuteType）后端枚举 11 种：openai、restful、celery、enterprise_wechat、wechat_official、dingtalk、embedded_chat、web_chat、mobile、agui、**nats**（新增，用于告警中心 NATS 触发）。
+共 6 个分类、17 种节点类型（`constants/chatflow.ts`、`components/studio/chatflowSettings.tsx`）。工作流执行类型（WorkFlowExecuteType）后端枚举 11 种：openai、restful、celery、enterprise_wechat、wechat_official、dingtalk、embedded_chat、web_chat、mobile、agui、**nats**（告警中心 NATS 触发）。
 
 > 证据来源：server/apps/opspilot/enum.py:67-68（WorkFlowExecuteType.NATS）
 
@@ -253,12 +258,12 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 
 共 6 种对话渠道。
 
-> 说明：上述枚举均直接来自源代码常量、模型字段或前端节点库注册，不含演进展望项。工具类目以 ToolsLoader 实际注册为准（`TOOL_MODULES` 启用 19 个模块键、17 个功能类目，较上一版本新增 `attachment_file`），目录中存在但未启用的 CMDB 类不计入；monitor 以内置工具形式提供，不经 TOOL_MODULES 注册；ChatFlow 节点 17 种以前端节点库为准，后端 WorkFlowExecuteType（11 种，新增 `nats`）为执行入口/渠道层枚举，二者口径不同。
+> 说明：上述枚举均直接来自源代码常量、模型字段或前端节点库注册，不含演进展望项。工具类目以 ToolsLoader 实际注册为准（`TOOL_MODULES` 启用 19 个模块键、17 个功能类目，含 `attachment_file`），目录中存在但未启用的 CMDB 类不计入；monitor 以内置工具形式提供，不经 TOOL_MODULES 注册；ChatFlow 节点 17 种以前端节点库为准，后端 WorkFlowExecuteType（11 种，含 `nats`）为执行入口/渠道层枚举，二者口径不同。
 
 
 ## 六、枚举与对象取值明细附录
 
-> 本附录列出 OpsPilot 模块的关键枚举与对象取值，取自源码常量定义。共 16 类（较上一版本新增：工作流执行类型 NATS 条目、知识任务状态、记忆存储引擎类型、工具附件文件类目）。
+> 本附录列出 OpsPilot 模块的关键枚举与对象取值，取自源码常量定义。共 16 类（较上一版本新增：工作流执行类型 NATS 条目、知识任务状态、记忆存储引擎类型、工具附件文件类目、工作流执行记录标识字段）。
 
 ### 内置LLM模型
 
@@ -297,6 +302,14 @@ OpsPilot 的知识库与智能体可结合 CMDB 资产事实数据回答运维�
 | 已中断 | `interrupted` | 工作流任务已中断 |
 | 成功 | `success` | 工作流任务成功 |
 | 失败 | `fail` | 工作流任务失败 |
+
+### 工作流执行记录标识字段
+
+`WorkFlowTaskResult` 模型含 `is_test` 布尔字段（`bot_mgmt.py:292`），随执行记录持久化并在查询接口中返回，支持过滤（`workflow_task_result_view.py:23`）。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `is_test` | Boolean，默认 False | True 表示该执行由配置页测试发起；False 表示真实对话或定时触发 |
 
 ### 工作流执行类型
 

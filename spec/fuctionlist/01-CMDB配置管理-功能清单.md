@@ -1,9 +1,9 @@
 # CMDB 配置管理 · 功能清单
 
-**文档版本：** V1.2
-**发布日期：** 2026-06-22
+**文档版本：** V1.3
+**发布日期：** 2026-06-23
 **适用范围：** BK-Lite CMDB 配置管理模块
-**编制依据：** CMDB PRD v1.6（2026-06-18）与 `server/apps/cmdb`、`server/apps/rpc/cmdb.py` 源代码核对（git diff master..HEAD，基线 master）
+**编制依据：** CMDB PRD v1.7（2026-06-23）与 `server/apps/cmdb`、`server/apps/rpc/cmdb.py` 源代码核对；同步基线 0fbb99c2
 
 ---
 
@@ -30,7 +30,7 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 | 联合唯一规则 | 对单字段或多字段组合设置唯一约束 | 规则生效后实例新增/编辑均须满足唯一约束 | GA |
 | 自动关联规则 | 基于字段匹配在实例间自动建立/刷新关联 | 依附于具体模型关系配置，同一关系可配多条规则；规则变更后触发关系同步 | GA |
 | 模型配置导入导出 | 模型定义的导入导出，用于模板复用与跨环境迁移 | 内容含关系与自动关联规则定义 | GA |
-| 模型与分类排序及可见性 | 超管可通过 `save_layout` 端点批量调整模型分类的显示顺序（`order`）与是否可见（`is_visible`），同时调整模型排序；普通用户只读 | 仅超级管理员可写；`classifications` 与 `models` 须为列表；分类写入失败时自动回滚；来源 `server/apps/cmdb/views/model.py:144`，`server/apps/cmdb/services/classification.py` | GA |
+| 模型与分类排序及可见性 | 超管可通过 `save_layout` 端点批量调整模型分类的显示顺序（`order`）与是否可见（`is_visible`），同时调整模型排序；普通用户只读 | 仅超级管理员可写；`classifications` 与 `models` 须为列表；分类写入失败时自动回滚（来源：`server/apps/cmdb/views/model.py:144`，`server/apps/cmdb/services/classification.py`） | GA |
 
 ### 2. 资产管理（实例）
 
@@ -61,9 +61,10 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 全局全文检索 | 跨模型全文检索资产；支持附件/图片字段的文件名主体检索（去路径、去扩展名作为可搜索冗余）；密码类型字段排除出检索索引 | 可配置是否区分大小写；文件名检索仅命中主体词干（如 `report` 命中 `report.pdf`，搜 `pdf`/完整文件名不命中）；来源 `server/apps/cmdb/display_field/handler.py`（`commit facf09566`） | GA |
+| 全局全文检索 | 跨模型全文检索资产；附件/图片字段的文件名词干（去路径、去扩展名）写入可搜索冗余字段，可通过文件名关键词命中含该附件的实例；密码型字段（`pwd`）刻意不进索引、不可搜索 | 可配置是否区分大小写；文件名解析失败时该字段不产生冗余，不影响其他字段命中；密码型字段无论如何不产生检索冗余（来源：`server/apps/cmdb/display_field/handler.py:205-249,305-373`；`display_field/constants.py:15-18`） | GA |
 | 按模型统计 | 检索结果先按模型汇总命中数，再进入单模型分页查看 | 不依赖单一模型入口 | GA |
 | 常用筛选保存 | 用户保存常用筛选条件并按模型复用 | 保存于用户个人配置，非浏览器本地临时记录 | GA |
+| 附件字段历史回填 | 修改模型的附件/图片字段定义时，系统自动回填历史实例的文件名词干 `_display` 冗余字段，使历史数据与新建数据具备同等全文检索能力 | 幂等操作，重算结果由实例自身文件数据决定；回填失败不中断主流程（来源：`server/apps/cmdb/services/model.py:1135-1180` `rebuild_file_instances_display`；`server/apps/cmdb/views/model.py:580-583`） | GA |
 | 资产视图 | 按模型统计资产数量并提供快速跳转入口 | — | GA |
 | 机房俯视平面图 | 以 row/col 网格展示机房内机柜的物理位置、类型与 U 位占用率；同格冲突标记返回，未定位机柜单独成列不丢弃 | 只读；冲突仅标记不阻断；利用率口径：(u_count - free_u) / u_count，free_u 以去重占用数计；须有 asset_info-View 权限；来源 `room_layout/<model_id>/<inst_id>` 端点（server/apps/cmdb/views/instance.py:1030-1050，server/apps/cmdb/services/rack_room.py:162-198） | GA |
 | 机柜正视 U 图 | 展示机柜内设备的 U 位排布（u_start/u_end）、越界与重叠标记，以及空闲 U 汇总（free_u/max_free_u） | 只读；越界/重叠仅标记不阻断；未分配 U 位设备单独成列不丢弃；须有 asset_info-View 权限；来源 `rack_layout/<model_id>/<inst_id>` 端点（server/apps/cmdb/views/instance.py:1052-1072，server/apps/cmdb/services/rack_room.py:146-159） | GA |
@@ -72,18 +73,18 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 
 | 功能项 | 功能说明 | 规格 / 约束 | 状态 |
 |---|---|---|---|
-| 采集对象树 | 按采集对象树查看可采集对象 | 社区版当前树节点：容器（Kubernetes、Docker）、虚拟化（VMware）、网络设备（SNMP+SOID）、主机（Linux/Windows/SSH物理服务器/IPMI）、数据库（MySQL/PostgreSQL/Redis/MSSQL/MongoDB/ES/HBase/InfluxDB）、存储设备（华为 OceanStor，Beta）、云平台（阿里云、腾讯云、华为云 hwcloud、FusionInsight）、中间件（Nginx/Apache/Tomcat/Zookeeper/Kafka/Consul/Etcd/RabbitMQ/ActiveMQ/RocketMQ/IIS/OpenResty/HAProxy/Squid/Tuxedo/Memcached/Spark/MinIO/KeepAlive）、配置文件；AWS/Jetty/WebLogic/JBoss/Ceph/WebSphere/TiDB/DB2/TongWeb 已迁移至商业版包 cmdb_enterprise，社区版不提供采集；来源 `server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE` | GA |
+| 采集对象树 | 按采集对象树查看可采集对象 | 社区版当前树节点：容器（Kubernetes、Docker）、虚拟化（VMware）、网络设备（SNMP+SOID）、主机（Linux/Windows/SSH物理服务器/IPMI）、数据库（MySQL/PostgreSQL/Redis/MSSQL/MongoDB/ES/HBase/InfluxDB）、存储设备（华为 OceanStor，Beta）、云平台（阿里云、腾讯云、华为云 hwcloud、FusionInsight）、中间件（Nginx/Apache/Tomcat/Zookeeper/Kafka/Consul/Etcd/RabbitMQ/ActiveMQ/RocketMQ/IIS/OpenResty/HAProxy/Squid/Tuxedo/Memcached/Spark/MinIO/KeepAlive）、配置文件；ManageOne/OpenStack/SmartX、Jetty/WebLogic/JBoss/Ceph/WebSphere/TongWeb、TiDB/DB2 已迁移至商业版包 cmdb_enterprise，社区版不提供采集（来源：`server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE`；`collection/plugins/community/cloud/__init__.py`；`middleware/__init__.py`） | GA |
 | 采集任务管理 | 采集任务的新增、编辑、删除、列表与详情 | — | GA |
 | 任务执行 | 手动执行采集任务 | 任务对象可选节点、模型实例、云区域等 | GA |
-| 任务状态汇总 | 查看任务执行状态汇总 | 状态共 8 种：未执行（0）、正在采集（1）、成功（2）、异常（3）、超时（4）、正在写入（5）、强制终止（6）、**部分成功（8）**；部分成功表示多目标任务中有成功也有失败，需运维感知；来源 `server/apps/cmdb/constants/constants.py:CollectRunStatusType` | GA |
+| 任务状态汇总 | 查看任务执行状态汇总 | 状态共 8 种：未执行（0）、正在采集（1）、成功（2）、异常（3）、超时（4）、正在写入（5）、强制终止（6）、**部分成功（8）**；部分成功表示多目标任务中有成功也有失败，需运维感知（来源：`server/apps/cmdb/constants/constants.py:CollectRunStatusType`） | GA |
 | 采集结果摘要 | 查看新增、更新、删除、关联等结果统计 | 各类明细可展开 | GA |
 | 插件说明 | 查看采集插件说明文档 | — | GA |
 | 实例侧关联任务 | 在实例侧查看可关联的采集任务名称 | — | GA |
-| 采集变更记录自动写入 | 采集新增/更新实例时自动写入变更记录（来源标记为"自动采集"场景） | 无业务字段变化的更新以"核实实例，无字段变化"区分记录；来源 `server/apps/cmdb/collection/change_records.py` | GA |
-| 采集任务多凭据池 | 采集任务支持配置多凭据轮询（凭据池），对每个目标依次尝试直到命中成功 | 含凭据命中状态管理（成功/失败/冷却期）与按 object_key 聚合；来源 `server/apps/cmdb/services/collect_credential_pool_service.py`、`collect_hit_state_service.py`、`collect_dispatch_service.py` | GA |
-| 部分数据库采集 | MongoDB、Elasticsearch、HBase、MSSQL、InfluxDB 等数据库对象采集 | MSSQL/MongoDB/ES/HBase 为 Beta；InfluxDB 为 Beta（协议采集，兼容 1.x/2.x）；TiDB/DB2 已迁移至商业版包 cmdb_enterprise，社区版不提供 | Beta |
-| 存储设备采集 | 采集华为 OceanStor 存储设备及其存储池、磁盘、卷（LUN） | 主对象 storage（设备级）+ 子对象 storage_pool / storage_disk / storage_volume；协议采集（HTTPS）；Beta；来源 `server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py` | Beta |
-| FusionInsight 采集 | 采集华为 FusionInsight 平台及其下集群（fusioninsight_cluster）与主机（fusioninsight_host） | 集群先处理再建主机归属关联；Beta；来源 `server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py` | Beta |
+| 采集变更记录自动写入 | 采集新增/更新实例时自动写入变更记录（来源标记为"自动采集"场景） | 无业务字段变化的更新以"核实实例，无字段变化"区分记录（来源：`server/apps/cmdb/collection/change_records.py`） | GA |
+| 采集任务多凭据池 | 采集任务支持配置多凭据轮询（凭据池），对每个目标依次尝试直到命中成功 | 含凭据命中状态管理（成功/失败/冷却期）与按 object_key 聚合（来源：`server/apps/cmdb/services/collect_credential_pool_service.py`、`collect_hit_state_service.py`、`collect_dispatch_service.py`） | GA |
+| 部分数据库采集 | MongoDB、Elasticsearch、HBase、MSSQL、InfluxDB 等数据库对象采集；TiDB/DB2 已迁移至商业版包 cmdb_enterprise，社区版不提供 | MSSQL/MongoDB/ES/HBase 为 Beta；InfluxDB 为 Beta（协议采集，兼容 1.x/2.x）（来源：`server/apps/cmdb/constants/constants.py:376-459` COLLECT_OBJ_TREE databases 节点） | Beta |
+| 存储设备采集 | 采集华为 OceanStor 存储设备及其存储池、磁盘、卷（LUN） | 主对象 storage（设备级）+ 子对象 storage_pool / storage_disk / storage_volume；协议采集（HTTPS）；Beta（来源：`server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py`） | Beta |
+| FusionInsight 采集 | 采集华为 FusionInsight 平台及其下集群（fusioninsight_cluster）与主机（fusioninsight_host） | 集群先处理再建主机归属关联；Beta（来源：`server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py`） | Beta |
 | 自定义上报（企业版扩展） | 外部系统通过凭据 + API 主动上报配置项数据到 CMDB，无需 Agent 采集 | 社区版为 no-op（门面 `server/apps/cmdb/custom_reporting/extensions.py`）；商业版通过企业扩展注册实现；路由入口 `CustomReportingTaskViewSet`（`server/apps/cmdb/views/custom_reporting.py`） | Beta |
 
 ### 6. SOID 特征库
@@ -124,9 +125,10 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 |---|---|---|---|
 | 变更记录查询 | 变更记录列表与详情查看 | — | GA |
 | 多维筛选 | 按变更类型、变更场景、操作人、时间范围筛选 | — | GA |
-| 变更场景归类 | 每条记录归入一种变更场景 | 5 类：设备流转、关系变更、普通属性变更、自动采集/自动化变更、模型管理变更 | GA |
-| 场景判定与修正 | 固定入口场景由系统判定且不可改；通用编辑入口给默认场景，可在少量相邻场景间轻量修正 | 首期不开放任意切换 | GA |
+| 变更场景归类 | 每条记录归入一种变更场景 | 6 类：设备流转、关系变更、普通属性变更、自动采集/自动化变更、模型管理变更、自定义上报变更（来源：`server/apps/cmdb/utils/change_record.py:1-20` `_MIRROR_SCENARIOS`） | GA |
+| 场景判定与修正 | 固定入口场景由系统判定且不可改；通用编辑入口给默认场景，可在少量相邻场景间轻量修正 | 实例编辑时可在"普通属性变更"与"设备流转"两类间轻量修正；非法选择回落为普通属性变更；不开放任意切换 | GA |
 | 来源分类 | 记录变更来源（人工、自动采集、系统、导入、同步），与变更场景分开 | — | GA |
+| 管理类变更镜像至平台审计日志 | 模型管理变更、采集自动化变更、自定义上报变更、关联关系变更四类场景，写入 CMDB 变更记录的同时经 NATS RPC 镜像进平台统一操作/审计日志；镜像失败不影响 CMDB 变更记录写入 | 仅以上 4 类场景镜像（`_MIRROR_SCENARIOS`），普通属性变更不镜像；三个写入入口（`create_change_record`、`batch_create_change_record`、`create_change_record_by_asso`）均已接入（来源：`server/apps/cmdb/utils/change_record.py:1-52,65,78-83,127-134`） | GA |
 
 ## 三、能力边界与约束
 
@@ -140,11 +142,11 @@ CMDB 是平台统一的资产与配置数据中心，围绕模型定义、资产
 
 CMDB 作为统一数据底座，向监控/告警提供资产上下文与责任人信息，向作业管理提供执行目标清单，向 OpsPilot 提供资产与关系的事实数据；自动发现的采集任务由节点管理提供的采集通道（Stargazer / NATS-Executor）执行；订阅与变更通知经系统管理统一配置的通知渠道送达。
 
-CMDB 通过 NATS handler 对外暴露 25 个函数，覆盖实例/模型/关联查询与 CRUD、统计分析、配置文件与凭据结果接收等能力。相比上一基线新增的 handler 包括：`search_instances_batch`（按 id 或 inst_name 批量查实例，供内部服务调用）、`update_instance`（更新实例字段）、`create_instance`（创建实例）、`delete_instance`（删除实例，支持批量）、`list_instances`（分页查询实例）、`search_model_attrs`（查模型属性）、`search_models`（查模型列表）、`search_classifications`（查分类列表）、`search_model_associations`（查模型关联定义）、`search_instance_associations`（查实例关联）、`create_instance_association`（建立实例关联）、`delete_instance_association`（删除实例关联）、`receive_collect_credential_result`（接收凭据执行结果并回写命中状态）。其中部分 handler 在 `apps/rpc/cmdb.py` 提供了 RPC 包装方法供其他模块直接调用（`list_instances`/`search_model_attrs`/`search_models`/`search_classifications`/`search_model_associations`/`search_instance_associations`/`create_instance_association`/`delete_instance_association`）。来源：server/apps/cmdb/nats/nats.py，server/apps/rpc/cmdb.py。
+CMDB 通过 NATS handler 对外暴露 25 个函数（原 15 个，本轮新增 10 个），新增第五类能力"实例/模型/关联通用查询与 CRUD"。本轮新增的 10 个 NATS handler 为：`create_instance`（创建实例）、`delete_instance`（删除实例，支持批量）、`list_instances`（分页查询实例）、`search_model_attrs`（查模型属性）、`search_models`（查模型列表）、`search_classifications`（查分类列表）、`search_model_associations`（查模型关联定义）、`search_instance_associations`（查实例关联）、`create_instance_association`（建立实例关联）、`delete_instance_association`（删除实例关联）。此外本轮还新增 `search_instances_batch`（按 id 或 inst_name 批量查实例）、`update_instance`（更新实例字段）、`receive_collect_credential_result`（接收凭据执行结果并回写命中状态）。其中 8 个在 `apps/rpc/cmdb.py` 提供了 RPC 包装方法供其他模块直接调用（`list_instances`/`search_model_attrs`/`search_models`/`search_classifications`/`search_model_associations`/`search_instance_associations`/`create_instance_association`/`delete_instance_association`）；`create_instance`、`delete_instance` 暂无 RPC 包装方法，仅可经 NATS 主题调用。来源：`server/apps/cmdb/nats/nats.py:436-679`，`server/apps/rpc/cmdb.py:44-94`。
 
 ## 五、支持的采集对象与内置模型范围
 
-以下为自动发现内置的采集对象与随平台预置的内置模型；标注【BETA】者为试验状态采集对象。配置项（CI）以内置模型为载体，亦可由用户自定义模型扩展。社区版树节点已按 `server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE` 当前代码核对（git diff master..HEAD）；AWS/Jetty/WebLogic/JBoss/Ceph/WebSphere/TiDB/DB2/TongWeb 采集插件已迁商业版包 cmdb_enterprise，不在社区版 `COLLECT_OBJ_TREE` 中列出。
+以下为自动发现内置的采集对象（约 30 个可选采集插件，含华为云子对象），以及随平台预置的内置模型；标注【BETA】者为试验状态采集对象。配置项（CI）以内置模型为载体，亦可由用户自定义模型扩展。社区版树节点已按 `server/apps/cmdb/constants/constants.py:COLLECT_OBJ_TREE` 当前代码核对（基线 0fbb99c2）；ManageOne/OpenStack/SmartX/AWS、Jetty/WebLogic/JBoss/Ceph/WebSphere/TongWeb、TiDB/DB2 采集插件已迁商业版包 cmdb_enterprise，不在社区版 `COLLECT_OBJ_TREE` 中列出。
 
 ### 5.1 采集对象（自动发现）
 
@@ -154,7 +156,7 @@ CMDB 通过 NATS handler 对外暴露 25 个函数，覆盖实例/模型/关联�
 | 虚拟化 | VMware vCenter（vCenter / ESXi 主机 / 虚拟机 / 数据存储） | GA |
 | 网络设备 | 基于 SNMP + SOID 特征库识别的交换机、路由器、防火墙、负载均衡等；支持 LLDP/CDP/FDB/ARP 拓扑发现 | GA |
 | 云平台 | 阿里云、腾讯云 | GA |
-| 云平台 | 华为云（hwcloud）：云服务器（ECS）/块存储（EVS）/对象存储（OBS）/VPC/子网/弹性公网 IP（EIP）/安全组（SG）/负载均衡（ELB）/分布式缓存（DCS）/关系型数据库（RDS） | Beta |
+| 云平台 | 华为云（hwcloud）：云服务器（ECS）/块存储（EVS）/对象存储（OBS）/VPC/子网/弹性公网 IP（EIP）/安全组（SG）/负载均衡（ELB）/分布式缓存（DCS）/关系型数据库（RDS）；自动建立 EVS↔ECS install_on、子网↔VPC belong 等关联关系（来源：`server/apps/cmdb/collection/collect_plugin/hwcloud.py:17-19,54-83`） | Beta |
 | 云平台 | FusionInsight：平台（fusioninsight）/ 集群（fusioninsight_cluster）/ 主机（fusioninsight_host） | Beta |
 | 云平台（商业版） | ManageOne、OpenStack、SmartX、AWS（已迁移至商业版包 cmdb_enterprise，社区版不提供） | — |
 | 主机 | Linux / Windows 主机（含磁盘、内存、网卡、GPU 等）、配置文件采集、物理服务器（SSH） | GA |
@@ -198,12 +200,12 @@ CMDB 通过 NATS handler 对外暴露 25 个函数，覆盖实例/模型/关联�
 
 > 说明：采集对象与内置模型基本一一对应——采集对象负责把资产数据写入对应模型形成配置项实例。内置模型的属性字段、关系与唯一规则均可由用户按需调整或新增。机房/机柜为管理类模型，不对应自动采集对象，字段由人工录入或导入维护。
 
-> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/__init__.py`，`server/apps/cmdb/node_configs/cloud/`，`server/apps/cmdb/constants/constants.py`，`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`，`server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py`，`server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py`，`server/apps/cmdb/collection/plugins/community/middleware/minio.py`，`server/apps/cmdb/collection/plugins/community/protocol/influxdb.py`　|　同步基线：master..HEAD（2026-06-22）　|　【已实现/已存在】
+> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/__init__.py`，`server/apps/cmdb/node_configs/cloud/`，`server/apps/cmdb/constants/constants.py`，`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`，`server/apps/cmdb/collection/collect_plugin/hwcloud.py`，`server/apps/cmdb/collection/plugins/community/cloud/oceanstor.py`，`server/apps/cmdb/collection/plugins/community/cloud/fusioninsight.py`，`server/apps/cmdb/collection/plugins/community/middleware/minio.py`，`server/apps/cmdb/collection/plugins/community/protocol/influxdb.py`　|　同步基线：0fbb99c2（2026-06-23）　|　【已实现/已存在】
 
 
 ## 六、采集配置项（字段）明细（逐项）
 
-> 本节逐项列出 CMDB 各采集对象（内置模型）可采集 / 维护的配置项字段，源自内置模型定义 `model_config.xlsx` 与社区版采集插件 `field_mapping`。字段标识为模型属性 `field_id`，中文含义为属性名称口径。用户可在内置模型上自定义扩展字段。本轮（master..HEAD）新增：InfluxDB（数据库，Beta）、MinIO（中间件，Beta）、华为 OceanStor 存储设备（storage/storage_pool/storage_disk/storage_volume，Beta）、FusionInsight（fusioninsight_cluster/fusioninsight_host，Beta）；keepalived 已重命名为 keepalive（字段不变）；以下各节按新增对象追加，其余既有条目不变。
+> 本节逐项列出 CMDB 各采集对象（内置模型）可采集 / 维护的配置项字段，源自内置模型定义 `model_config.xlsx` 与社区版采集插件 `field_mapping`。字段标识为模型属性 `field_id`，中文含义为属性名称口径。用户可在内置模型上自定义扩展字段。基线 0fbb99c2 已含：InfluxDB（数据库，Beta）、MinIO（中间件，Beta）、华为 OceanStor 存储设备（storage/storage_pool/storage_disk/storage_volume，Beta）、FusionInsight（fusioninsight_cluster/fusioninsight_host，Beta）；keepalive（原 keepalived，model_id 已重命名，字段不变）。
 
 ### 主机与硬件
 

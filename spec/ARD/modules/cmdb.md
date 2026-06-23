@@ -88,24 +88,46 @@
 | `collect_node_mgmt_hosts` | :354 | 采集节点管理主机 |
 
 ### 采集插件【已实现/已存在】
-采集能力分两层：`collection/collect_plugin/` 下的采集映射实现（Python 文件），与 `constants/constants.py` 中面向 UI 的插件目录（`COLLECTION_METRICS` 分组，含 Beta 标记，部分条目由 Stargazer 以 JOB/PROTOCOL 驱动，无独立映射文件）。
+采集能力分两层：`collection/collect_plugin/` 下的采集映射实现（Python 文件），与 `constants/constants.py` 中面向 UI 的插件目录（`COLLECT_OBJ_TREE`，含 Beta 标记，部分条目由 Stargazer 以 JOB/PROTOCOL 驱动，无独立映射文件）。
 
-本轮对采集对象集合做了收敛：中间件侧移除 Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere，数据库侧移除 DB2/TiDB，达梦（DaMeng）去除社区重复注册——上述对象均已迁移至商业版包 `cmdb_enterprise`（未入库），社区包不再注册其插件与 node_configs 条目。证据：`collection/plugins/community/middleware/__init__.py`、`node_configs/ssh/`、`node_configs/databases/`、commit c85ac0d43。
+本轮对采集对象集合做了收敛：中间件侧移除 Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere，数据库侧移除 DB2/TiDB，达梦（DaMeng）去除社区重复注册——上述对象均已迁移至商业版包 `cmdb_enterprise`（未入库），社区包不再注册其插件与 node_configs 条目。证据：`collection/plugins/community/middleware/__init__.py`、`node_configs/ssh/`、`node_configs/databases/`。
 
 - **协议 / 网络**：SNMP/SSH、网络拓扑（LLDP/CDP/FDB/ARP）（`network.py`、`topology/`、`protocol.py`）。
-- **云平台**（constants.py:482-520）：社区侧云平台采集仅保留 阿里云（`aliyun.py`，id=`aliyun_account`）、腾讯云（`qcloud.py`，id=`qcloud`）、华为云（`hwcloud.py`，id=`hwcloud`，Beta）、FusionInsight（`fusioninsight.py`，Beta）、OceanStor（`oceanstor.py`）；AWS/ManageOne/OpenStack/SmartX 已迁移至商业版包 `cmdb_enterprise`（未入库），社区包不再注册其插件与 node_configs 条目。华为云采集已由 `huaweicloud` 重命名为 `hwcloud`（`supported_model_id=hwcloud`，Stargazer plugin_name 仍为 `huaweicloud_info`），并在 ECS/platform 基础上增量采集 EVS（块存储）/OBS（对象存储）/VPC/subnet（子网）/EIP（弹性公网 IP）/SG（安全组）/ELB（负载均衡）/DCS（分布式缓存）/RDS（关系型数据库）等子对象，单资源采集失败不影响其余子对象写入。[[../../prd/CMDB/自动发现.md#3.1 采集对象树与插件]]
+- **云平台**（constants.py:481-521）：社区侧云平台采集仅保留 阿里云（`aliyun.py`）、腾讯云（`qcloud.py`，id=`qcloud`，不存在独立 Tencent 插件）、华为云（`hwcloud.py`，id=`hwcloud`，Beta）、FusionInsight（`fusioninsight.py`，Beta）、OceanStor（`oceanstor.py`）；ManageOne/OpenStack/SmartX 已从可选清单移除【已下线 @0fbb99c2】，对应插件类亦已从 `collection/plugins/community/cloud/__init__.py` 注销【已实现/已存在】。华为云采集已由 `huaweicloud` 重命名为 `hwcloud`（`supported_model_id=hwcloud`，Stargazer plugin_name 仍为 `huaweicloud_info`），并在 ECS/platform 基础上增量采集 EVS（块存储）/OBS（对象存储）/VPC/subnet（子网）/EIP（弹性公网 IP）/SG（安全组）/ELB（负载均衡）/DCS（分布式缓存）/RDS（关系型数据库）等子对象，单资源采集失败不影响其余子对象写入。[[../../prd/CMDB/自动发现.md#3.1 采集对象树与插件]]
+  - **华为云子对象采集**（`collection/collect_plugin/hwcloud.py`）【已实现/已存在】：在原账户级资产清单基础上，新增 ECS/VPC/EVS/OBS/子网等子对象采集，并自动建立跨对象关联关系：云硬盘（EVS）通过 `asso_evs` 建立与所属华为云平台的 `belong` 关系，以及与所在 ECS 的 `install_on` 关系（ECS 存在时）；子网（Subnet）通过 `asso_subnet` 建立与所属 VPC 的 `belong` 关系（VPC 未命中时跳过并记录警告）。采集顺序按父在子前策略（`MODEL_ORDER` 列表）确保父对象先写入，子对象关联时可正确查找父对象实例名。
 - **容器 / 虚拟化**（constants.py:318-359）：K8s、Docker（`k8s.py`）；VMware vCenter（`vmware.py`）。目录中无 Hyper-V 条目，亦无 hyperv 插件文件。
 - **存储设备**（constants.py:462-477）：华为存储 OceanStor（`oceanstor.py`），对象树 `storage_device→storage`，采集存储设备/存储池/磁盘/卷（LUN），主对象 `storage`，子对象 `storage_pool/storage_disk/storage_volume`，复用云家族机制（`oceanstor.py:17-19`）。
-- **数据库**（constants.py:377-461）：MySQL、InfluxDB、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch、HBase（实现集中于 `databases.py`）。TiDB/DB2 已迁移至商业版包（未入库），社区包不再注册。目录与映射中均无 Oracle 条目。
-- **中间件**（constants.py:572-765）：Nginx、MinIO、Zookeeper、Kafka、Tomcat、KeepAlive、Spark（id=`spark`，constants.py:756）等，多为 JOB 驱动。Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere 已迁移至商业版包（未入库）。目录中无 Hadoop 条目；大数据相关现仅 Spark（中间件分组）与 FusionInsight（云平台分组）。
-- **配置文件采集**（task_type=`config_file`，constants.py:538）：由 Stargazer 采集后经 NATS `receive_config_file_result`(nats.py:680) 回传，落库为 `ConfigFileVersion`，内容存 MinIO。
+- **数据库**（constants.py:377-461）：MySQL、InfluxDB、PostgreSQL、MSSQL、Redis、MongoDB、Elasticsearch、HBase（实现集中于 `databases.py`）。TiDB/DB2 已从可选清单移除【已下线 @0fbb99c2】。目录与映射中均无 Oracle 条目。
+- **中间件**（constants.py:572-765）：Nginx、MinIO、Zookeeper、Kafka、Tomcat、KeepAlive、Spark（id=`spark`，constants.py:756）等，多为 JOB 驱动。Ceph/JBoss/Jetty/TongWeb/WebLogic/WebSphere 已从可选清单移除，对应插件类亦已从 `collection/plugins/community/middleware/__init__.py` 注销【已下线 @0fbb99c2】。目录中无 Hadoop 条目；大数据相关现仅 Spark（中间件分组）与 FusionInsight（云平台分组）。
+- **配置文件采集**（task_type=`config_file`，constants.py:538）：由 Stargazer 采集后经 NATS `receive_config_file_result`(nats.py:417) 回传，落库为 `ConfigFileVersion`，内容存 MinIO。
 
-> 证据来源：`server/apps/cmdb/collection/plugins/community/cloud/__init__.py`（仅 aliyun/qcloud/hwcloud/fusioninsight/oceanstor）；`server/apps/cmdb/node_configs/cloud/`（仅 aliyun/qcloud/hwcloud/fusioninsight/vmware）；`server/apps/cmdb/constants/constants.py`（云平台目录仅 aliyun_account/qcloud/hwcloud/fusioninsight）；`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py:39-186`　|　同步基线：0fbb99c25　|　【已实现/已存在】
+> 证据来源：`server/apps/cmdb/constants/constants.py:481-521`；`server/apps/cmdb/collection/plugins/community/cloud/__init__.py:1-15`；`server/apps/cmdb/collection/plugins/community/middleware/__init__.py:1-45`；`server/apps/cmdb/collection/collect_plugin/hwcloud.py`（`asso_evs:54-70`、`asso_subnet:72-83`、`MODEL_ORDER:17-20`、`format_metrics:108-143`）；`server/apps/cmdb/collection/plugins/community/cloud/hwcloud.py`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py:39-186`　|　同步基线：0fbb99c2　|　【已实现/已存在】
+
+### 附件/图片字段全文检索支持【已实现/已存在】
+实例展示字段（`_display` 冗余字段）体系新增对附件与图片字段的处理：
+
+- **索引转换**（`display_field/handler.py:205-249`）：`DisplayFieldConverter.convert_file()` 对附件/图片字段的元数据（文件列表 JSON）提取每个文件 `name` 的路径词干（去目录、去扩展名），以逗号分隔写入对应的 `_display` 冗余字段，使全文检索可命中文件名关键词。URL、ID、大小等元数据不进入索引；解析失败静默返回空串，不污染索引。
+- **密码型字段刻意排除**（`display_field/constants.py:15-18`，`SENSITIVE_FIELD_TYPES = frozenset(["pwd"])`）：密码型字段不生成 `_display`，亦不参与全文检索，为刻意设计而非遗漏。
+- **历史实例回填**（`services/model.py:1135-1180`，`ModelManage.rebuild_file_instances_display`）：修改附件/图片型模型字段定义时（`views/model.py:580-583`），系统自动遍历该模型全部存量实例，为含文件数据的实例重算并写回 `_display` 词干，确保历史数据与新建数据具备同等检索能力。回填失败不中断主流程。
+- **字段类型判定**由企业版扩展点 `model_ops/extensions.is_file_attr_type` 提供；社区版该函数恒返回 `False`，附件/图片检索能力仅在企业版生效【推断】。
+
+> 证据来源：`server/apps/cmdb/display_field/handler.py:205-249,305-373`；`server/apps/cmdb/display_field/constants.py:15-18`；`server/apps/cmdb/services/model.py:1135-1180`；`server/apps/cmdb/views/model.py:580-583`　|　同步基线：0fbb99c2　|　【已实现/已存在】（企业版扩展点判定【推断】）
+
+### 变更审计镜像同步【已实现/已存在】
+`utils/change_record.py` 新增审计镜像机制，将特定场景的 CMDB 变更记录同步写入平台统一操作/审计日志：
+
+- **镜像触发条件**（`change_record.py:20`，`_MIRROR_SCENARIOS`）：仅以下四类场景触发镜像——`MODEL_MANAGEMENT_CHANGE`（模型管理变更）、`COLLECT_AUTOMATION_CHANGE`（采集自动化变更）、`CUSTOM_REPORTING_CHANGE`（自定义上报变更）、`RELATION_CHANGE`（关联关系变更）。普通属性变更不镜像。
+- **传输路径**：经 `SystemMgmt().save_operation_log()`（`apps/rpc/system_mgmt`）通过 NATS RPC 写入 `system_mgmt` 模块的统一操作日志，同步提供操作人、动作类型、目标对象与前后数据快照。
+- **容错设计**（`change_record.py:48-49`）：镜像调用在独立 `try/except` 中执行，任何异常仅记录 warning 日志，绝不影响 CMDB 本身的变更记录写入。
+- **覆盖入口**：单条写入（`create_change_record:52-66`）、批量写入（`batch_create_change_record:69-80`）、关联关系写入（`create_change_record_by_asso:108-134`）三个入口均已接入镜像逻辑。
+
+> 证据来源：`server/apps/cmdb/utils/change_record.py:1-52`（`_mirror_change_record`、`_MIRROR_SCENARIOS`）；`change_record.py:65,78-83,127-134`（三个写入入口）　|　同步基线：0fbb99c2　|　【已实现/已存在】
 
 ## 6. 风险 / 待确认
 - 双图库后端按 `FALKORDB_HOST` 环境变量在运行期单选（`graph/drivers/graph_client.py:46-52`），非并存；切换条件已明确【已实现/已存在】。
 - Neo4j 搜索/过滤/权限取数路径已参数化（`graph/neo4j.py:10,301`），该路径 Cypher 注入风险已消除；但 `create_entity`（`:197` `CREATE (n:{label} {properties_str})`）、按 id 取详情（`:408` `WHERE id(n) = {id}`）等写入/查询路径仍为 f-string 拼接，参数化尚未覆盖全部查询，存量注入面仍需收口【已实现/待确认风险】。
 - 凭据加密密钥管理与轮转策略【待确认】。
+- 华为云子对象关联（EVS/Subnet）依赖父对象（ECS/VPC）写入成功且含 `resource_id` 字段；若 Stargazer 上报数据中父对象 `resource_id` 缺失，子对象关联跳过（子网未命中 VPC 记 warning，EVS 未命中 ECS 则静默仅建 belong），可能导致关系不完整【已实现/待确认风险】。
 
 ## 7. 证据来源
-`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/oceanstor.py,collection/plugins/community/cloud/{aliyun,qcloud,hwcloud,fusioninsight,oceanstor}.py,constants/constants.py,node_configs/cloud/{aliyun,qcloud,hwcloud,fusioninsight,vmware}.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,views/instance.py:1030-1072,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py`。
+`server/apps/cmdb/{urls.py,models/*,graph/*,graph/neo4j.py,graph/drivers/graph_client.py,collection/*,collection/collect_plugin/hwcloud.py,collection/collect_plugin/oceanstor.py,collection/plugins/community/cloud/__init__.py,collection/plugins/community/middleware/__init__.py,collection/plugins/community/cloud/{aliyun,qcloud,hwcloud,fusioninsight,oceanstor}.py,constants/constants.py,node_configs/cloud/{aliyun,qcloud,hwcloud,fusioninsight,vmware}.py,tasks/celery_tasks.py,nats/nats.py,services/rack_room.py,services/model.py:1135-1180,views/instance.py:1030-1072,views/model.py:580-583,utils/change_record.py,display_field/handler.py:205-373,display_field/constants.py:15-18,support-files/model_config.xlsx}`；`server/apps/rpc/cmdb.py:44-94`；`server/apps/rpc/system_mgmt.py`；`agents/stargazer/plugins/inputs/hwcloud/huaweicloud_info.py`。
