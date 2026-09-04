@@ -44,7 +44,9 @@ import {
   ARCH_TITLE_FILL,
   ARCH_TITLE_SHADOW_BLUR,
   ARCH_TITLE_SHADOW_COLOR,
+  ARCH_TUBE_EMISSIVE_INTENSITY,
   ARCH_TUBE_IN_GLOW_LAYER,
+  ARCH_TUBE_OPACITY,
   ARCH_TUBE_RADIAL_SEGMENTS,
   ARCH_TUBE_TUBULAR_SEGMENTS,
   architecturePulseCompanionHead,
@@ -84,6 +86,7 @@ export interface Application3DArchitectureView {
   pulses: Application3DArchitecturePulse[];
   billboardMeshes: THREE.Object3D[];
   rankedNodeIds: string[];
+  setHoveredNode?: (nodeId: string | null) => void;
   tick: (dt: number, camera?: THREE.Camera) => void;
   dispose: () => void;
 }
@@ -127,6 +130,8 @@ export const ARCH_LED_ALARM_COLOR = ARCH_EDGE_ALARM;
 /** Alarming hosts only. 素柜 never get a stroke, so there is no quiet-stroke color. */
 export const ARCH_STROKE_ALARM_COLOR = ARCH_EDGE_ALARM;
 export const ARCH_VENEER_LIFT = 0.002;
+export const ARCH_RING_CYAN = 0x00d2ff;
+export const ARCH_RING_ALARM = 0xff3b3b;
 
 export const hostHasAlarm = (
   node: { kind: string; health?: { state: string } } | undefined,
@@ -147,7 +152,7 @@ export const architectureEdgeColor = (
   target: { kind: string; health?: { state: string } } | undefined,
 ) => (hostHasAlarm(target) ? ARCH_EDGE_ALARM : ARCH_EDGE);
 
-const TUBE_SCROLL_SPEED = 0.08;
+const TUBE_SCROLL_SPEED = 0;
 const PLANE_TITLE_WIDTH = 2.5;
 const PLANE_TITLE_HEIGHT = 0.70;
 const PULSE_POINT = new THREE.Vector3();
@@ -380,6 +385,51 @@ const paintTubeStripe = () => {
   return texture;
 };
 
+export const createSelectionRingMaterial = (color: number) =>
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying vec2 vUv;
+
+      void main() {
+        vec2 p = (vUv - 0.5) * 2.0;
+        float d = length(p);
+        if (d > 1.0) discard;
+
+        // Sharp core ring around d = 0.78
+        float mainRing = exp(-pow((d - 0.78) / 0.042, 2.0));
+        // Subtle outer accent ring around d = 0.90
+        float subRing = exp(-pow((d - 0.90) / 0.018, 2.0)) * 0.45;
+        // Soft inner floor glow
+        float innerFloor = smoothstep(0.78, 0.25, d) * 0.22;
+        // Soft halo aura
+        float aura = exp(-pow((d - 0.78) / 0.12, 2.0)) * 0.35;
+
+        float alpha = mainRing * 0.85 + subRing + innerFloor + aura;
+        if (alpha < 0.005) discard;
+
+        vec3 color = uColor * (1.0 + mainRing * 0.4);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+
 interface RackKitGeometries {
   box: THREE.BoxGeometry;
   led: THREE.CylinderGeometry;
@@ -394,6 +444,8 @@ interface RackKitMaterials {
   ledAlarm: THREE.MeshStandardMaterial;
   strokeAlarm: THREE.MeshStandardMaterial;
   shadow: THREE.MeshBasicMaterial;
+  ringCyan: THREE.ShaderMaterial;
+  ringAlarm: THREE.ShaderMaterial;
 }
 
 const textureSrc = (asset: string | { src: string }) =>
@@ -508,6 +560,8 @@ const createRackMaterials = (): RackKitMaterials => {
     opacity: 0.28,
     depthWrite: false,
   });
+  const ringCyan = createSelectionRingMaterial(ARCH_RING_CYAN);
+  const ringAlarm = createSelectionRingMaterial(ARCH_RING_ALARM);
   return {
     faces: [side, side, top, top, front, top],
     textures: [frontAlbedo, sideAlbedo, topAlbedo],
@@ -515,6 +569,8 @@ const createRackMaterials = (): RackKitMaterials => {
     ledAlarm,
     strokeAlarm,
     shadow,
+    ringCyan,
+    ringAlarm,
   };
 };
 
@@ -638,6 +694,16 @@ const addRackMeshes = (
   shadow.scale.set(width * 1.18, depth * 1.18, 1);
   shadow.userData.archRole = 'rack-contact-shadow';
   group.add(shadow);
+
+  const ringSize = Math.max(width, depth) * 1.85;
+  const ring = new THREE.Mesh(geos.shadow, materials.ringCyan);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0, -height / 2 + 0.002, 0);
+  ring.scale.set(ringSize, ringSize, 1);
+  ring.visible = false;
+  ring.userData.archRole = 'rack-selection-ring';
+  group.add(ring);
+  group.userData.selectionRing = ring;
 };
 
 export const createArchitectureEdgeCurve = (
@@ -646,6 +712,12 @@ export const createArchitectureEdgeCurve = (
 ) => {
   const from = new THREE.Vector3(start.x, start.y, start.z);
   const to = new THREE.Vector3(end.x, end.y, end.z);
+  const dy = to.y - from.y;
+  if (Math.abs(dy) > 0.05) {
+    const p1 = new THREE.Vector3(from.x, from.y + dy * 0.4, from.z);
+    const p2 = new THREE.Vector3(to.x, to.y - dy * 0.4, to.z);
+    return new THREE.CatmullRomCurve3([from, p1, p2, to], false, 'centripetal');
+  }
   const mid = from.clone().lerp(to, 0.5);
   mid.y += 0.12;
   return new THREE.CatmullRomCurve3([from, mid, to]);
@@ -814,6 +886,7 @@ const createTubeGroup = (
   );
   const pulseMaterial = createPulseTrailMaterial(pulseColor, trail);
   const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
+  pulseMesh.visible = false;
   const haloRadius = architecturePulseHaloRadius(radius);
   const haloGeometry = new THREE.TubeGeometry(
     curve,
@@ -828,6 +901,7 @@ const createTubeGroup = (
     haloTrailPower: ARCH_PULSE_HALO_TRAIL_POWER,
   });
   const haloMesh = new THREE.Mesh(haloGeometry, haloMaterial);
+  haloMesh.visible = false;
   const stampPulseMesh = (
     target: THREE.Mesh,
     archRole: 'edge-pulse' | 'edge-pulse-halo',
@@ -874,6 +948,15 @@ const createTubeGroup = (
   updateArchitecturePulse(pulse, 0);
   const group = new THREE.Group();
   group.userData.archRole = role;
+  group.userData.edgeId = edge.id;
+  group.userData.sourceId = edge.sourceId;
+  group.userData.targetId = edge.targetId;
+  group.userData.alarming = alarming;
+  group.userData.defaultOpacity = tubeStyle.opacity;
+  group.userData.defaultEmissiveIntensity = tubeStyle.emissiveIntensity;
+  group.userData.baseMesh = mesh;
+  group.userData.pulseMesh = pulseMesh;
+  group.userData.haloMesh = haloMesh;
   group.add(mesh, haloMesh, pulseMesh);
   return { group, mesh, pulse, scrollMap: map };
 };
@@ -915,6 +998,8 @@ export const createArchitectureTreeGroup = (
     rackMats.ledAlarm,
     rackMats.strokeAlarm,
     rackMats.shadow,
+    rackMats.ringCyan,
+    rackMats.ringAlarm,
   );
 
   const stripe = paintTubeStripe();
@@ -1090,6 +1175,108 @@ export const createArchitectureTreeGroup = (
   });
 
   const rankedNodeIds = layout.nodes.map((node) => node.id);
+
+  const setHoveredNode = (hoveredId: string | null) => {
+    if (!hoveredId) {
+      interPlaneTubes.forEach((tubeGroup) => {
+        tubeGroup.visible = true;
+        const mesh = (tubeGroup.userData.baseMesh ?? tubeGroup.children[0]) as THREE.Mesh | undefined;
+        if (mesh && 'material' in mesh) {
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.opacity = Number(tubeGroup.userData.defaultOpacity ?? ARCH_TUBE_OPACITY);
+          mat.emissiveIntensity = Number(
+            tubeGroup.userData.defaultEmissiveIntensity ?? ARCH_TUBE_EMISSIVE_INTENSITY,
+          );
+        }
+        const pulse = tubeGroup.userData.pulseMesh as THREE.Mesh | undefined;
+        if (pulse) pulse.visible = false;
+        const halo = tubeGroup.userData.haloMesh as THREE.Mesh | undefined;
+        if (halo) halo.visible = false;
+      });
+
+      nodeGroups.forEach((nodeGroup) => {
+        const ring = nodeGroup.userData.selectionRing as THREE.Mesh | undefined;
+        if (ring) ring.visible = false;
+        nodeGroup.scale.set(1, 1, 1);
+      });
+
+      nodeLabels.forEach((label) => {
+        const mat = label.material as THREE.MeshBasicMaterial;
+        mat.opacity = 1.0;
+        const targetScale = label.userData.labelScale as THREE.Vector3 | undefined;
+        if (targetScale) {
+          label.scale.set(targetScale.x, targetScale.y, 1);
+        }
+      });
+      return;
+    }
+
+    const hoveredNode = nodesById.get(hoveredId);
+    if (!hoveredNode) return;
+
+    const matchingEdgeIds = new Set<string>();
+    const connectedNodeIds = new Set<string>([hoveredId]);
+
+    layout.edges.forEach((edge) => {
+      if (hoveredNode.kind === 'application' && edge.sourceId === hoveredId) {
+        matchingEdgeIds.add(edge.id);
+        connectedNodeIds.add(edge.targetId);
+      } else if (hoveredNode.kind === 'host' && edge.targetId === hoveredId) {
+        matchingEdgeIds.add(edge.id);
+        connectedNodeIds.add(edge.sourceId);
+      }
+    });
+
+    interPlaneTubes.forEach((tubeGroup) => {
+      const mesh = (tubeGroup.userData.baseMesh ?? tubeGroup.children[0]) as THREE.Mesh | undefined;
+      const pulse = tubeGroup.userData.pulseMesh as THREE.Mesh | undefined;
+      const halo = tubeGroup.userData.haloMesh as THREE.Mesh | undefined;
+      const isMatch = matchingEdgeIds.has(tubeGroup.userData.edgeId as string);
+
+      tubeGroup.visible = isMatch;
+      if (isMatch) {
+        if (mesh && 'material' in mesh) {
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.opacity = 0.95;
+          mat.emissiveIntensity = 0.85;
+        }
+        if (pulse) pulse.visible = true;
+        if (halo) halo.visible = true;
+      } else {
+        if (pulse) pulse.visible = false;
+        if (halo) halo.visible = false;
+      }
+    });
+
+    nodeGroups.forEach((nodeGroup, nodeId) => {
+      const isConnected = connectedNodeIds.has(nodeId);
+      const ring = nodeGroup.userData.selectionRing as THREE.Mesh | undefined;
+      const node = nodesById.get(nodeId);
+      const isAlarm = Boolean(node && (hostHasAlarm(node) || node.health?.state === 'alarming'));
+
+      if (ring) {
+        if (isConnected) {
+          ring.visible = true;
+          ring.material = isAlarm ? rackMats.ringAlarm : rackMats.ringCyan;
+        } else {
+          ring.visible = false;
+        }
+      }
+
+      nodeGroup.scale.set(1, 1, 1);
+    });
+
+    nodeLabels.forEach((label, nodeId) => {
+      const mat = label.material as THREE.MeshBasicMaterial;
+      const targetScale = label.userData.labelScale as THREE.Vector3 | undefined;
+      const isConnected = connectedNodeIds.has(nodeId);
+      mat.opacity = isConnected ? 1.0 : 0.2;
+      if (targetScale) {
+        label.scale.set(targetScale.x, targetScale.y, 1);
+      }
+    });
+  };
+
   return {
     group,
     layout,
@@ -1101,6 +1288,7 @@ export const createArchitectureTreeGroup = (
     pulses,
     billboardMeshes,
     rankedNodeIds,
+    setHoveredNode,
     tick: (dt: number, camera?: THREE.Camera) => {
       scrollMaps.forEach((map) => {
         map.offset.x = (map.offset.x + dt * TUBE_SCROLL_SPEED) % 1;

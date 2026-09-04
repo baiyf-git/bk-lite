@@ -31,15 +31,15 @@ export const ARCH_NODE_SIZE: Record<
 export const ARCH_PLANE_GAP = 3.2;
 
 /**
- * World Y of the lower (应用) platform surface (top face of the frustum).
+ * World Y of the lower (主机) platform surface (top face of the frustum).
  * Both boards are horizontal XZ, same orientation as the grid floor, stacked
- * along +Y. Lower / closer to the floor = 应用; upper = 主机. No 系统 plane.
+ * along +Y. Lower / closer to the floor = 主机; upper = 应用. No 系统 plane.
  */
 export const ARCH_STACK_ORIGIN = 1.8;
 
 export const ARCH_PLANE_Y = {
-  application: ARCH_STACK_ORIGIN,
-  host: ARCH_STACK_ORIGIN + ARCH_PLANE_GAP,
+  host: ARCH_STACK_ORIGIN,
+  application: ARCH_STACK_ORIGIN + ARCH_PLANE_GAP,
 } as const;
 
 export type Application3DArchitecturePlaneKind = keyof typeof ARCH_PLANE_Y;
@@ -244,19 +244,19 @@ export const ARCH_CAMERA_TARGET_Z = -0.6;
 export const ARCH_CAMERA_FRAME_FILL = 0.70;
 
 export const ARCH_PLANE_ORDER: Application3DArchitecturePlaneKind[] = [
-  'application',
   'host',
+  'application',
 ];
 
 export const ARCH_PLANE_TITLE: Record<
   Application3DArchitecturePlaneKind,
   { titleKey: string; titleFallback: string }
 > = {
+  host: { titleKey: 'dashboard.application3DKindHost', titleFallback: '主机' },
   application: {
     titleKey: 'dashboard.application3DKindApplication',
     titleFallback: '应用',
   },
-  host: { titleKey: 'dashboard.application3DKindHost', titleFallback: '主机' },
 };
 
 export const formatArchitecturePlaneTitle = (name: string) => name.trim();
@@ -401,8 +401,8 @@ export interface Application3DCameraSpherical {
 }
 
 const kindOrder: Record<Application3DArchitectureKind, number> = {
-  application: 0,
-  host: 1,
+  host: 0,
+  application: 1,
   system: 2,
 };
 
@@ -425,7 +425,7 @@ const wrapOnPitch = (
 };
 
 const planeSurfaceLift = (kind: Application3DArchitectureKind) =>
-  kind === 'application' ? 0 : ARCH_PLANE_THICKNESS / 2;
+  kind === 'host' ? 0 : ARCH_PLANE_THICKNESS / 2;
 
 /** Rack center sits ON the platform surface (frustum top / thin-plane face). */
 const rackStandY = (planeY: number, height: number, kind: Application3DArchitectureKind) =>
@@ -642,7 +642,7 @@ export const layoutApplication3DArchitecture = (
 
   const planes: Application3DArchitecturePlane[] = ARCH_PLANE_ORDER.map((kind) => {
     const title = ARCH_PLANE_TITLE[kind];
-    const isBase = kind === 'application';
+    const isBase = kind === 'host';
     return {
       kind,
       titleKey: title.titleKey,
@@ -662,20 +662,20 @@ export const layoutApplication3DArchitecture = (
     };
   });
 
-  const stackBottomY = ARCH_PLANE_Y.application - ARCH_FRUSTUM_HEIGHT;
-  const stackTopY = ARCH_PLANE_Y.host + ARCH_NODE_SIZE.host.height;
+  const stackBottomY = ARCH_PLANE_Y.host - ARCH_FRUSTUM_HEIGHT;
+  const stackTopY = ARCH_PLANE_Y.application + ARCH_NODE_SIZE.application.height;
 
   return {
     nodes: placedNodes,
     edges: placedEdges,
     planes,
     width: Math.max(contentWidth, maxX - minX),
-    height: ARCH_PLANE_Y.host - ARCH_PLANE_Y.application,
+    height: ARCH_PLANE_Y.application - ARCH_PLANE_Y.host,
     depth: contentDepth,
     stackHeight: stackTopY - stackBottomY,
     stackBottomY,
     stackTopY,
-    centerY: (ARCH_PLANE_Y.application + ARCH_PLANE_Y.host) / 2,
+    centerY: (ARCH_PLANE_Y.host + ARCH_PLANE_Y.application) / 2,
     // Default look-target frame stays on the small-board center, not the
     // grown mesh. Extra rows recede along −Z; the user orbits/pans to them.
     centerZ: 0,

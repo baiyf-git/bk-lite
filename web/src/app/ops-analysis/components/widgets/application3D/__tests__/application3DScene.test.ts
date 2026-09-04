@@ -290,8 +290,8 @@ describe('application3D architecture scene', () => {
     const planesAfter = planeGroups();
     expect(planesAfter).toHaveLength(2);
     expect(planesAfter.every((plane) => Math.abs(plane.scale.x - 1) < 0.02)).toBe(true);
-    expect(planesAfter[0].position.y).toBeCloseTo(ARCH_PLANE_Y.application);
-    expect(planesAfter[1].position.y).toBeCloseTo(ARCH_PLANE_Y.host);
+    expect(planesAfter[0].position.y).toBeCloseTo(ARCH_PLANE_Y.host);
+    expect(planesAfter[1].position.y).toBeCloseTo(ARCH_PLANE_Y.application);
     expect(planesAfter[0].position.y).toBeLessThan(planesAfter[1].position.y);
     expect(planesAfter[0].userData.planeShape).toBe('frustum');
     expect(planesAfter[1].userData.planeShape).toBe('plane');
@@ -320,36 +320,36 @@ describe('application3D architecture scene', () => {
     controller.dispose();
   });
 
-  it('keeps the host plane hidden until the application fly-in finishes', () => {
+  it('keeps the application plane hidden until the host fly-in finishes', () => {
     const controller = mountScene();
     controller.showArchitecture(architecture);
     for (let step = 0; step < 155; step += 1) flushFrames(20);
-    const [app, host] = planeGroups();
-    expect(app?.userData.planeKind).toBe('application');
+    const [host, app] = planeGroups();
     expect(host?.userData.planeKind).toBe('host');
-    const hostRest = (host?.userData.restPosition as THREE.Vector3 | undefined)?.clone();
-    expect(hostRest).toBeTruthy();
-    expect(app?.scale.x).toBeGreaterThan(0);
-    expect(app?.scale.x).toBeLessThan(1);
-    expect(host?.scale.x).toBe(0);
-    expect(host?.position.distanceTo(hostRest ?? new THREE.Vector3())).toBeLessThan(0.05);
-
-    for (let step = 0; step < 10; step += 1) flushFrames(20);
-    expect(app?.scale.x).toBeGreaterThan(0.2);
-    expect(app?.scale.x).toBeLessThan(1);
-    expect(host?.scale.x).toBe(0);
-    expect(host?.position.distanceTo(hostRest ?? new THREE.Vector3())).toBeLessThan(0.05);
-
-    for (let step = 0; step < 16; step += 1) flushFrames(20);
-    expect(Math.abs((app?.scale.x ?? 0) - 1)).toBeLessThan(0.02);
+    expect(app?.userData.planeKind).toBe('application');
+    const appRest = (app?.userData.restPosition as THREE.Vector3 | undefined)?.clone();
+    expect(appRest).toBeTruthy();
     expect(host?.scale.x).toBeGreaterThan(0);
     expect(host?.scale.x).toBeLessThan(1);
-    expect(host?.position.distanceTo(hostRest ?? new THREE.Vector3())).toBeGreaterThan(1);
+    expect(app?.scale.x).toBe(0);
+    expect(app?.position.distanceTo(appRest ?? new THREE.Vector3())).toBeLessThan(0.05);
+
+    for (let step = 0; step < 10; step += 1) flushFrames(20);
+    expect(host?.scale.x).toBeGreaterThan(0.2);
+    expect(host?.scale.x).toBeLessThan(1);
+    expect(app?.scale.x).toBe(0);
+    expect(app?.position.distanceTo(appRest ?? new THREE.Vector3())).toBeLessThan(0.05);
+
+    for (let step = 0; step < 16; step += 1) flushFrames(20);
+    expect(Math.abs((host?.scale.x ?? 0) - 1)).toBeLessThan(0.02);
+    expect(app?.scale.x).toBeGreaterThan(0);
+    expect(app?.scale.x).toBeLessThan(1);
+    expect(app?.position.distanceTo(appRest ?? new THREE.Vector3())).toBeGreaterThan(1);
 
     for (let step = 0; step < 25; step += 1) flushFrames(20);
-    expect(Math.abs((app?.scale.x ?? 0) - 1)).toBeLessThan(0.02);
     expect(Math.abs((host?.scale.x ?? 0) - 1)).toBeLessThan(0.02);
-    expect(host?.position.distanceTo(hostRest ?? new THREE.Vector3())).toBeLessThan(0.05);
+    expect(Math.abs((app?.scale.x ?? 0) - 1)).toBeLessThan(0.02);
+    expect(app?.position.distanceTo(appRest ?? new THREE.Vector3())).toBeLessThan(0.05);
     controller.dispose();
   });
 
@@ -875,6 +875,32 @@ describe('application3D architecture host pick', () => {
     expect(
       screenRectsIntersect(overlayScreenRect(selection.overlay), selection.hostScreenRect),
     ).toBe(false);
+    controller.dispose();
+  });
+
+  it('pins focus on click, keeps selection while moving pointer, and switches or clears on next click', () => {
+    const { controller, canvas } = mountArchitecture();
+    const appMesh = findRackMesh('app-1');
+    const hostQuiet = findRackMesh('host-quiet');
+    expect(appMesh).toBeTruthy();
+    expect(hostQuiet).toBeTruthy();
+
+    // Click app-1 to pin selection
+    mockHit(appMesh);
+    click(canvas);
+
+    // Pointer move to empty area should NOT clear focus while pinned
+    mockHit(undefined);
+    canvas?.dispatchEvent(new PointerEvent('pointermove', point));
+
+    // Click host-quiet to switch selection
+    mockHit(hostQuiet);
+    click(canvas);
+
+    // Click empty area to unpin selection
+    mockHit(undefined);
+    click(canvas);
+
     controller.dispose();
   });
 });

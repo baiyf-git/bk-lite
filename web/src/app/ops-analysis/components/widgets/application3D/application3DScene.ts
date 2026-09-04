@@ -894,6 +894,8 @@ export const createApplication3DScene = (
   let focusedId = '';
   let architectureView: Application3DArchitectureView | null = null;
   let architectureHostId = '';
+  let architectureHoveredId: string | null = null;
+  let architectureSelectedId: string | null = null;
   const focusLift = new THREE.Vector3();
   const architectureCameraPosition = new THREE.Vector3();
   const architectureLookTarget = new THREE.Vector3();
@@ -1630,17 +1632,40 @@ export const createApplication3DScene = (
     });
   };
 
+  const pickArchitectureNode = (clientX: number, clientY: number) => {
+    if (!architectureView || phase !== 'architecture') return undefined;
+    if (!setPointerFromClient(clientX, clientY)) return undefined;
+    const targets = Array.from(architectureView.nodeGroups.values());
+    const hits = raycaster.intersectObjects(targets.length > 0 ? targets : [architectureView.group], true);
+    for (const hit of hits) {
+      const root = findArchitectureRackRoot(hit.object);
+      if (root && typeof root.userData.nodeId === 'string') {
+        return architectureView.layout.nodes.find((node) => node.id === root.userData.nodeId);
+      }
+    }
+    return undefined;
+  };
+
   const pickAlarmingArchitectureHost = (clientX: number, clientY: number) => {
     if (!architectureView || phase !== 'architecture') return undefined;
     if (!setPointerFromClient(clientX, clientY)) return undefined;
-    const hit = raycaster.intersectObjects([architectureView.group], true)[0];
-    if (!hit) return undefined;
-    const root = findArchitectureRackRoot(hit.object);
-    if (!root?.userData.alarming || typeof root.userData.nodeId !== 'string') return undefined;
-    return architectureView.layout.nodes.find((node) => node.id === root.userData.nodeId);
+    const targets = Array.from(architectureView.nodeGroups.values());
+    const hits = raycaster.intersectObjects(targets.length > 0 ? targets : [architectureView.group], true);
+    for (const hit of hits) {
+      const root = findArchitectureRackRoot(hit.object);
+      if (root?.userData.alarming && typeof root.userData.nodeId === 'string') {
+        return architectureView.layout.nodes.find((node) => node.id === root.userData.nodeId);
+      }
+    }
+    return undefined;
   };
 
   const disposeArchitecture = () => {
+    architectureSelectedId = null;
+    if (architectureHoveredId) {
+      architectureHoveredId = null;
+      architectureView?.setHoveredNode?.(null);
+    }
     clearArchitectureHost();
     architectureView?.dispose();
     architectureView = null;
@@ -1888,6 +1913,28 @@ export const createApplication3DScene = (
     ) {
       clearArchitectureHost();
     }
+    if (phase === 'architecture') {
+      if (pointerDown) {
+        if (!architectureSelectedId && architectureHoveredId) {
+          architectureHoveredId = null;
+          architectureView?.setHoveredNode?.(null);
+          renderer.domElement.title = '';
+          requestRender();
+        }
+      } else {
+        const hitNode = pickArchitectureNode(event.clientX, event.clientY);
+        const nextHovered = hitNode?.id ?? null;
+        if (nextHovered !== architectureHoveredId) {
+          architectureHoveredId = nextHovered;
+          if (!architectureSelectedId) {
+            architectureView?.setHoveredNode?.(architectureHoveredId);
+          }
+          renderer.domElement.title = hitNode ? hitNode.name : '';
+          requestRender();
+        }
+      }
+      return;
+    }
     if (!active || !options.interactive || pointerDown || phase !== 'wall') {
       if (hoveredId) {
         hoveredId = '';
@@ -1906,6 +1953,14 @@ export const createApplication3DScene = (
   };
 
   const handlePointerLeave = () => {
+    if (phase === 'architecture' && architectureHoveredId) {
+      architectureHoveredId = null;
+      if (!architectureSelectedId) {
+        architectureView?.setHoveredNode?.(null);
+      }
+      renderer.domElement.title = '';
+      requestRender();
+    }
     if (!hoveredId) return;
     hoveredId = '';
     renderer.domElement.title = '';
@@ -1937,10 +1992,28 @@ export const createApplication3DScene = (
         syncCursor(event.clientX, event.clientY);
         return;
       }
-      const host = pickAlarmingArchitectureHost(event.clientX, event.clientY);
-      if (host) selectArchitectureHost(host);
-      else clearArchitectureHost();
+      const hitNode = pickArchitectureNode(event.clientX, event.clientY);
+      if (hitNode) {
+        if (architectureSelectedId === hitNode.id) {
+          architectureSelectedId = null;
+          clearArchitectureHost();
+          architectureView?.setHoveredNode?.(null);
+        } else {
+          architectureSelectedId = hitNode.id;
+          architectureView?.setHoveredNode?.(architectureSelectedId);
+          if (hitNode.kind === 'host' && hitNode.health?.state === 'alarming') {
+            selectArchitectureHost(hitNode);
+          } else {
+            clearArchitectureHost();
+          }
+        }
+      } else {
+        architectureSelectedId = null;
+        clearArchitectureHost();
+        architectureView?.setHoveredNode?.(null);
+      }
       syncCursor(event.clientX, event.clientY);
+      requestRender();
       return;
     }
     if (dragged) {

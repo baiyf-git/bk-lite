@@ -136,6 +136,8 @@ import {
   ARCH_RACK_STROKE_WIDTH,
   ARCH_STROKE_ALARM_COLOR,
   ARCH_STROKE_EMISSIVE_INTENSITY,
+  ARCH_RING_CYAN,
+  ARCH_RING_ALARM,
   architectureEdgeColor,
   architecturePulseProgress,
   createArchitectureEdgeCurve,
@@ -199,19 +201,19 @@ const ARCH_PREVIOUS_CAMERA_PHI = Math.PI / 2 - Math.PI / 8;
 const ARCH_PREVIOUS_CHASSIS_COLOR = 0x3a3e44;
 
 describe('application3D architecture layout', () => {
-  it('places exactly two horizontal XZ ranks: 应用 lower, 主机 higher on +Y', () => {
+  it('places exactly two horizontal XZ ranks: 主机 lower, 应用 higher on +Y', () => {
     const layout = layoutApplication3DArchitecture(tree());
     const byId = Object.fromEntries(layout.nodes.map((node) => [node.id, node]));
     expect(layout.nodes.find((node) => node.kind === 'system')).toBeUndefined();
     expect(byId['sys-1']).toBeUndefined();
     expect(byId['app-1'].y).toBeGreaterThan(ARCH_PLANE_Y.application);
     expect(byId['host-1'].y).toBeGreaterThan(ARCH_PLANE_Y.host);
-    expect(ARCH_PLANE_Y.host - ARCH_PLANE_Y.application).toBe(ARCH_PLANE_GAP);
-    expect(ARCH_PLANE_Y.application).toBeLessThan(ARCH_PLANE_Y.host);
-    expect(ARCH_STACK_ORIGIN).toBe(ARCH_PLANE_Y.application);
-    expect(ARCH_PLANE_Y.application).toBeGreaterThan(0);
-    expect(ARCH_PLANE_Y.host).toBeGreaterThan(ARCH_PLANE_Y.application);
-    expect(byId['app-1'].y).toBeLessThan(byId['host-1'].y);
+    expect(ARCH_PLANE_Y.application - ARCH_PLANE_Y.host).toBe(ARCH_PLANE_GAP);
+    expect(ARCH_PLANE_Y.host).toBeLessThan(ARCH_PLANE_Y.application);
+    expect(ARCH_STACK_ORIGIN).toBe(ARCH_PLANE_Y.host);
+    expect(ARCH_PLANE_Y.host).toBeGreaterThan(0);
+    expect(ARCH_PLANE_Y.application).toBeGreaterThan(ARCH_PLANE_Y.host);
+    expect(byId['host-1'].y).toBeLessThan(byId['app-1'].y);
     expect(layout.nodes.filter((node) => node.id === 'host-shared')).toHaveLength(1);
     expect(layout.edges.filter((edge) => edge.targetId === 'host-shared')).toHaveLength(2);
     expect(byId['app-1'].x).not.toBe(byId['app-2'].x);
@@ -223,12 +225,12 @@ describe('application3D architecture layout', () => {
     expect(ARCH_FRONT_INSET).toBeGreaterThan(0.5);
     expect(layout.planes).toHaveLength(2);
     expect(ARCH_PLANE_COUNT).toBe(2);
-    expect(layout.planes.map((plane) => plane.kind)).toEqual(['application', 'host']);
-    expect(layout.planes.map((plane) => plane.titleFallback)).toEqual(['应用', '主机']);
-    expect(layout.planes.map((plane) => plane.titleText)).toEqual(['应用', '主机']);
+    expect(layout.planes.map((plane) => plane.kind)).toEqual(['host', 'application']);
+    expect(layout.planes.map((plane) => plane.titleFallback)).toEqual(['主机', '应用']);
+    expect(layout.planes.map((plane) => plane.titleText)).toEqual(['主机', '应用']);
     expect(layout.planes.map((plane) => plane.y)).toEqual([
-      ARCH_PLANE_Y.application,
       ARCH_PLANE_Y.host,
+      ARCH_PLANE_Y.application,
     ]);
     expect(layout.planes[0].y).toBeLessThan(layout.planes[1].y);
     expect(layout.planes.every((plane) => plane.orientation === 'xz')).toBe(true);
@@ -356,7 +358,7 @@ describe('application3D architecture layout', () => {
     expect(layout.nodes.find((node) => node.kind === 'host')).toBeUndefined();
     expect(layout.edges).toHaveLength(0);
     expect(layout.planes).toHaveLength(2);
-    expect(layout.planes.map((plane) => plane.kind)).toEqual(['application', 'host']);
+    expect(layout.planes.map((plane) => plane.kind)).toEqual(['host', 'application']);
   });
 
   it('places isolated hosts in a row grid on the host plane', () => {
@@ -372,11 +374,11 @@ describe('application3D architecture layout', () => {
     const byId = Object.fromEntries(layout.nodes.map((node) => [node.id, node]));
     expect(layout.nodes).toHaveLength(3);
     expect(byId['app-orphan'].y).toBeCloseTo(
-      ARCH_PLANE_Y.application + ARCH_NODE_SIZE.application.height / 2,
+      ARCH_PLANE_Y.application + ARCH_PLANE_THICKNESS / 2 + ARCH_NODE_SIZE.application.height / 2,
     );
     expect(byId['host-a'].y).toBeCloseTo(byId['host-b'].y);
     expect(byId['host-a'].y).toBeCloseTo(
-      ARCH_PLANE_Y.host + ARCH_PLANE_THICKNESS / 2 + ARCH_NODE_SIZE.host.height / 2,
+      ARCH_PLANE_Y.host + ARCH_NODE_SIZE.host.height / 2,
     );
     expect(byId['host-a'].x).not.toBe(byId['host-b'].x);
     expect(Math.abs(byId['host-a'].x - byId['host-b'].x)).toBeCloseTo(ARCH_GRID_PITCH);
@@ -399,7 +401,7 @@ describe('application3D architecture layout', () => {
     }));
     const placed = layout.nodes.filter((node) => node.kind === 'host');
     expect(placed).toHaveLength(5);
-    const hostY = ARCH_PLANE_Y.host + ARCH_PLANE_THICKNESS / 2 + ARCH_NODE_SIZE.host.height / 2;
+    const hostY = ARCH_PLANE_Y.host + ARCH_NODE_SIZE.host.height / 2;
     expect(placed.every((node) => Math.abs(node.y - hostY) < 1e-6)).toBe(true);
     expect(new Set(placed.map((node) => `${node.x.toFixed(2)},${node.z.toFixed(2)}`)).size).toBe(5);
     const zs = [...new Set(placed.map((node) => node.z))].sort((left, right) => left - right);
@@ -711,12 +713,12 @@ describe('application3D architecture layout', () => {
     expect(footNdc.y).toBeGreaterThan(-1);
     expect(topNdc.y).toBeLessThan(1);
     expect(topNdc.y - footNdc.y).toBeGreaterThan(0.55);
-    expect(hostNdc.y).toBeGreaterThan(appNdc.y);
+    expect(appNdc.y).toBeGreaterThan(hostNdc.y);
     expect(pose.target.y).toBeCloseTo(layout.centerY + ARCHITECTURE_MOTION.cameraTargetLift);
     expect(pose.target.y).toBeGreaterThan(layout.stackBottomY);
     expect(pose.target.y).toBeLessThan(layout.stackTopY);
-    expect(layout.centerY).toBeGreaterThan(ARCH_PLANE_Y.application);
-    expect(layout.centerY).toBeLessThan(ARCH_PLANE_Y.host);
+    expect(layout.centerY).toBeGreaterThan(ARCH_PLANE_Y.host);
+    expect(layout.centerY).toBeLessThan(ARCH_PLANE_Y.application);
     expect(layout.planes[0].y).toBeLessThan(layout.planes[1].y);
     const frame = describeArchitectureLandedFrame(layout, pose);
     expect(frame.planes[0].shape).toBe('frustum');
@@ -872,22 +874,22 @@ describe('application3D architecture view', () => {
     })).toBe(true);
     const appMesh = planeMeshes.find((mesh) => mesh.userData.planeKind === 'application');
     const hostMesh = planeMeshes.find((mesh) => mesh.userData.planeKind === 'host');
-    const appSides = appMesh?.material as THREE.MeshStandardMaterial;
-    const hostVeneer = hostMesh?.material as THREE.MeshStandardMaterial;
-    expect(appMesh?.userData.planeSkin).toBe('veneer-side');
-    expect(appMesh?.userData.hasRim).toBe(false);
-    expect(appMesh?.userData.hasStroke).toBe(false);
-    expect(appMesh?.userData.matchesTopHue).toBe(true);
-    expect(appSides.opacity).toBe(ARCH_PLANE_SIDE_OPACITY);
-    expect(appSides.emissiveIntensity).toBe(ARCH_PLANE_SIDE_EMISSIVE_INTENSITY);
-    expect(appSides.color.getHex()).toBe(ARCH_PLANE);
-    expect(hostMesh?.userData.planeSkin).toBe('veneer');
-    expect(hostMesh?.userData.hasRim).toBe(true);
-    expect(hostVeneer.opacity).toBe(ARCH_PLANE_OPACITY);
-    expect(hostVeneer.emissiveIntensity).toBe(ARCH_PLANE_EMISSIVE_INTENSITY);
-    expect(hostVeneer.color.getHex()).toBe(ARCH_PLANE);
-    expect(hostVeneer.color.getHex()).toBe(appSides.color.getHex());
-    expect(appSides.opacity).toBeLessThan(hostVeneer.opacity);
+    const hostSides = hostMesh?.material as THREE.MeshStandardMaterial;
+    const appVeneerMesh = appMesh?.material as THREE.MeshStandardMaterial;
+    expect(hostMesh?.userData.planeSkin).toBe('veneer-side');
+    expect(hostMesh?.userData.hasRim).toBe(false);
+    expect(hostMesh?.userData.hasStroke).toBe(false);
+    expect(hostMesh?.userData.matchesTopHue).toBe(true);
+    expect(hostSides.opacity).toBe(ARCH_PLANE_SIDE_OPACITY);
+    expect(hostSides.emissiveIntensity).toBe(ARCH_PLANE_SIDE_EMISSIVE_INTENSITY);
+    expect(hostSides.color.getHex()).toBe(ARCH_PLANE);
+    expect(appMesh?.userData.planeSkin).toBe('veneer');
+    expect(appMesh?.userData.hasRim).toBe(true);
+    expect(appVeneerMesh.opacity).toBe(ARCH_PLANE_OPACITY);
+    expect(appVeneerMesh.emissiveIntensity).toBe(ARCH_PLANE_EMISSIVE_INTENSITY);
+    expect(appVeneerMesh.color.getHex()).toBe(ARCH_PLANE);
+    expect(appVeneerMesh.color.getHex()).toBe(hostSides.color.getHex());
+    expect(hostSides.opacity).toBeLessThan(appVeneerMesh.opacity);
     expect(veneerMeshes).toHaveLength(2);
     expect(veneerMeshes.every((mesh) => {
       const material = mesh.material as THREE.MeshStandardMaterial;
@@ -898,21 +900,21 @@ describe('application3D architecture view', () => {
         && mesh.geometry.type === 'PlaneGeometry'
       );
     })).toBe(true);
-    const appVeneer = veneerMeshes.find((mesh) => mesh.userData.planeKind === 'application');
-    expect(appVeneer?.userData.archRole).toBe('plane-veneer');
-    expect(appVeneer?.rotation.x).toBeCloseTo(ARCH_PLANE_ROTATION_X);
-    expect(appMesh?.userData.planeShape).toBe('frustum');
-    expect(appMesh?.geometry.type).not.toBe('PlaneGeometry');
-    expect(appMesh?.userData.planeThickness).toBeCloseTo(ARCH_FRUSTUM_HEIGHT);
-    expect(appMesh?.userData.frustumHeight).toBeCloseTo(ARCH_FRUSTUM_HEIGHT);
-    expect(appMesh?.userData.frustumTaper).toBeCloseTo(ARCH_FRUSTUM_TAPER);
-    expect(appMesh?.rotation.x ?? 1).toBeCloseTo(0);
-    appMesh?.geometry.computeBoundingBox();
-    const frustumBox = appMesh?.geometry.boundingBox;
+    const hostVeneer = veneerMeshes.find((mesh) => mesh.userData.planeKind === 'host');
+    expect(hostVeneer?.userData.archRole).toBe('plane-veneer');
+    expect(hostVeneer?.rotation.x).toBeCloseTo(ARCH_PLANE_ROTATION_X);
+    expect(hostMesh?.userData.planeShape).toBe('frustum');
+    expect(hostMesh?.geometry.type).not.toBe('PlaneGeometry');
+    expect(hostMesh?.userData.planeThickness).toBeCloseTo(ARCH_FRUSTUM_HEIGHT);
+    expect(hostMesh?.userData.frustumHeight).toBeCloseTo(ARCH_FRUSTUM_HEIGHT);
+    expect(hostMesh?.userData.frustumTaper).toBeCloseTo(ARCH_FRUSTUM_TAPER);
+    expect(hostMesh?.rotation.x ?? 1).toBeCloseTo(0);
+    hostMesh?.geometry.computeBoundingBox();
+    const frustumBox = hostMesh?.geometry.boundingBox;
     expect(frustumBox).toBeTruthy();
     expect((frustumBox?.max.y ?? 0) - (frustumBox?.min.y ?? 0)).toBeCloseTo(ARCH_FRUSTUM_HEIGHT);
     expect((frustumBox?.max.x ?? 0) - (frustumBox?.min.x ?? 0)).toBeCloseTo(ARCH_PLANE_WORLD_WIDTH);
-    const positions = appMesh?.geometry.getAttribute('position');
+    const positions = hostMesh?.geometry.getAttribute('position');
     let bottomMinX = Infinity;
     let bottomMaxX = -Infinity;
     if (positions) {
@@ -928,21 +930,21 @@ describe('application3D architecture view', () => {
     sample.computeBoundingBox();
     expect((sample.boundingBox?.max.x ?? 0) - (sample.boundingBox?.min.x ?? 0)).toBeCloseTo(2);
     sample.dispose();
-    expect(hostMesh?.userData.planeShape).toBe('plane');
-    expect(hostMesh?.geometry.type).toBe('PlaneGeometry');
-    expect(hostMesh?.rotation.x).toBeCloseTo(ARCH_PLANE_ROTATION_X);
-    expect(hostMesh?.userData.planeOrientation).toBe(ARCH_PLANE_ORIENTATION);
-    expect(hostMesh?.scale.x).toBeGreaterThanOrEqual(ARCH_PLANE_WORLD_WIDTH);
-    expect(hostMesh?.scale.y).toBeGreaterThanOrEqual(ARCH_PLANE_WORLD_DEPTH);
-    expect(hostMesh?.userData.planeThickness).toBeCloseTo(ARCH_PLANE_THICKNESS);
-    expect(view.planeGroups[0].userData.planeKind).toBe('application');
-    expect(view.planeGroups[1].userData.planeKind).toBe('host');
+    expect(appMesh?.userData.planeShape).toBe('plane');
+    expect(appMesh?.geometry.type).toBe('PlaneGeometry');
+    expect(appMesh?.rotation.x).toBeCloseTo(ARCH_PLANE_ROTATION_X);
+    expect(appMesh?.userData.planeOrientation).toBe(ARCH_PLANE_ORIENTATION);
+    expect(appMesh?.scale.x).toBeGreaterThanOrEqual(ARCH_PLANE_WORLD_WIDTH);
+    expect(appMesh?.scale.y).toBeGreaterThanOrEqual(ARCH_PLANE_WORLD_DEPTH);
+    expect(appMesh?.userData.planeThickness).toBeCloseTo(ARCH_PLANE_THICKNESS);
+    expect(view.planeGroups[0].userData.planeKind).toBe('host');
+    expect(view.planeGroups[1].userData.planeKind).toBe('application');
     expect(view.planeGroups[0].userData.planeShape).toBe('frustum');
     expect(view.planeGroups[1].userData.planeShape).toBe('plane');
-    expect(view.planeGroups[0].position.y).toBeCloseTo(ARCH_PLANE_Y.application);
-    expect(view.planeGroups[1].position.y).toBeCloseTo(ARCH_PLANE_Y.host);
+    expect(view.planeGroups[0].position.y).toBeCloseTo(ARCH_PLANE_Y.host);
+    expect(view.planeGroups[1].position.y).toBeCloseTo(ARCH_PLANE_Y.application);
     expect(view.planeGroups[0].position.y).toBeLessThan(view.planeGroups[1].position.y);
-    expect(titles.map((title) => title.userData.planeTitle)).toEqual(['应用', '主机']);
+    expect(titles.map((title) => title.userData.planeTitle)).toEqual(['主机', '应用']);
     expect(titles.every((title) => title.userData.planeTitleSide === 'right')).toBe(true);
     expect(titles.every((title) => title.userData.titleHasBackground === false)).toBe(true);
     expect(titles.every((title) => title.userData.titleHasArrow === false)).toBe(true);
@@ -1803,5 +1805,163 @@ describe('application3D architecture view', () => {
     expect(viewSrc).toContain('uColor * band');
     expect(viewSrc).not.toContain('0.45 + 0.55 * band');
     expect(viewSrc).toContain('uHaloTrailPower');
+  });
+
+  it('creates orthogonal conduit curves with vertical exit and entry for deployment links', () => {
+    const from = { x: 0, y: 5, z: 0 };
+    const to = { x: 3, y: 1.8, z: 2 };
+    const curve = createArchitectureEdgeCurve(from, to);
+    expect(curve).toBeInstanceOf(THREE.CatmullRomCurve3);
+    const startPoint = curve.getPointAt(0);
+    const endPoint = curve.getPointAt(1);
+    expect(startPoint.x).toBeCloseTo(from.x);
+    expect(startPoint.y).toBeCloseTo(from.y);
+    expect(startPoint.z).toBeCloseTo(from.z);
+    expect(endPoint.x).toBeCloseTo(to.x);
+    expect(endPoint.y).toBeCloseTo(to.y);
+    expect(endPoint.z).toBeCloseTo(to.z);
+
+    // Tangents at start and end drop vertically along Y
+    const startTangent = curve.getTangentAt(0.01);
+    const endTangent = curve.getTangentAt(0.99);
+    expect(startTangent.y).toBeLessThan(-0.5);
+    expect(endTangent.y).toBeLessThan(-0.5);
+  });
+
+  it('maintains clean unified rack models without crown and controls pulse/opacity on hover', () => {
+    const view = createArchitectureTreeGroup(tree(), (_id, fallback = '') => fallback);
+    const appGroup = view.nodeGroups.get('app-1');
+    const hostGroup = view.nodeGroups.get('host-1');
+    expect(appGroup).toBeTruthy();
+    expect(hostGroup).toBeTruthy();
+
+    let crownFound = false;
+    view.group.traverse((child) => {
+      if (child.userData.archRole === 'app-crown') crownFound = true;
+    });
+    expect(crownFound).toBe(false);
+
+    // Initial / quiet state: pulses are hidden so no flowing comets
+    expect(view.pulses.every((p) => p.mesh.visible === false && p.halo?.visible === false)).toBe(true);
+
+    expect(typeof view.setHoveredNode).toBe('function');
+    const appTubes = view.interPlaneTubes.filter(
+      (tube) => tube.userData.sourceId === 'app-1',
+    );
+    const nonAppTubes = view.interPlaneTubes.filter(
+      (tube) => tube.userData.sourceId !== 'app-1',
+    );
+    expect(appTubes.length).toBeGreaterThan(0);
+    expect(nonAppTubes.length).toBeGreaterThan(0);
+
+    // Hover app-1: matching tubes highlight with visible pulses, non-matching tubes hide, model scale stays constant
+    view.setHoveredNode?.('app-1');
+    expect(appGroup?.scale.x).toBeCloseTo(1);
+    appTubes.forEach((tubeGroup) => {
+      expect(tubeGroup.visible).toBe(true);
+      const mesh = tubeGroup.children[0] as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const pulse = tubeGroup.userData.pulseMesh as THREE.Mesh;
+      const halo = tubeGroup.userData.haloMesh as THREE.Mesh;
+      expect(mat.opacity).toBeGreaterThan(0.5);
+      expect(mat.emissiveIntensity).toBeGreaterThan(0.3);
+      expect(pulse.visible).toBe(true);
+      expect(halo.visible).toBe(true);
+    });
+    nonAppTubes.forEach((tubeGroup) => {
+      expect(tubeGroup.visible).toBe(false);
+      const pulse = tubeGroup.userData.pulseMesh as THREE.Mesh;
+      const halo = tubeGroup.userData.haloMesh as THREE.Mesh;
+      expect(pulse.visible).toBe(false);
+      expect(halo.visible).toBe(false);
+    });
+
+    // Unhover: restore visibility and default opacity, hide pulses
+    view.setHoveredNode?.(null);
+    expect(appGroup?.scale.x).toBeCloseTo(1);
+    expect(view.pulses.every((p) => p.mesh.visible === false && p.halo?.visible === false)).toBe(true);
+    view.interPlaneTubes.forEach((tubeGroup) => {
+      expect(tubeGroup.visible).toBe(true);
+      const mesh = tubeGroup.children[0] as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      expect(mat.opacity).toBe(ARCH_TUBE_OPACITY);
+      expect(mat.emissiveIntensity).toBe(ARCH_TUBE_EMISSIVE_INTENSITY);
+    });
+
+    // Hover multi-deployment shared host: both parent app tubes highlight
+    view.setHoveredNode?.('host-shared');
+    const sharedTubes = view.interPlaneTubes.filter(
+      (tube) => tube.userData.targetId === 'host-shared',
+    );
+    expect(sharedTubes).toHaveLength(2);
+    sharedTubes.forEach((tubeGroup) => {
+      const mesh = tubeGroup.children[0] as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const pulse = tubeGroup.userData.pulseMesh as THREE.Mesh;
+      expect(mat.opacity).toBeGreaterThan(0.5);
+      expect(pulse.visible).toBe(true);
+    });
+
+    view.dispose();
+  });
+
+  it('renders luminous base selection rings across the deployment chain, cyan for normal and red for alarming', () => {
+    const alarmingHealth = {
+      ...health,
+      state: 'alarming' as const,
+      reason: 'active_alarm' as const,
+      activeAlarmCount: 2,
+    };
+    const archWithAlarm = tree({
+      nodes: [
+        { id: 'sys-1', kind: 'system', name: '门户系统', health },
+        { id: 'app-1', kind: 'application', name: '门户', health },
+        { id: 'app-2', kind: 'application', name: '订单', health },
+        { id: 'host-1', kind: 'host', name: 'web-1', health: alarmingHealth },
+        { id: 'host-shared', kind: 'host', name: 'shared', health },
+      ],
+    });
+    const view = createArchitectureTreeGroup(archWithAlarm, (_id, fallback = '') => fallback);
+
+    // Initial state: every node has a selection ring mesh, all hidden by default
+    view.nodeGroups.forEach((group) => {
+      const ring = group.userData.selectionRing as THREE.Mesh | undefined;
+      expect(ring).toBeTruthy();
+      expect(ring?.userData.archRole).toBe('rack-selection-ring');
+      expect(ring?.visible).toBe(false);
+      expect(ring?.geometry).toBeInstanceOf(THREE.PlaneGeometry);
+      expect(ring?.scale.x).toBeGreaterThan(0.4);
+      expect(ring?.scale.x).toBeLessThan(1.0);
+    });
+
+    // Hover app-1: app-1, host-1, host-shared rings turn visible
+    view.setHoveredNode?.('app-1');
+    const app1Ring = view.nodeGroups.get('app-1')?.userData.selectionRing as THREE.Mesh;
+    const app2Ring = view.nodeGroups.get('app-2')?.userData.selectionRing as THREE.Mesh;
+    const host1Ring = view.nodeGroups.get('host-1')?.userData.selectionRing as THREE.Mesh;
+    const hostSharedRing = view.nodeGroups.get('host-shared')?.userData.selectionRing as THREE.Mesh;
+
+    expect(app1Ring.visible).toBe(true);
+    expect(host1Ring.visible).toBe(true);
+    expect(hostSharedRing.visible).toBe(true);
+    expect(app2Ring.visible).toBe(false);
+
+    // Normal app & normal host get cyan ring
+    const app1Mat = app1Ring.material as THREE.ShaderMaterial;
+    expect(app1Mat.uniforms.uColor.value.getHex()).toBe(ARCH_RING_CYAN);
+    const hostSharedMat = hostSharedRing.material as THREE.ShaderMaterial;
+    expect(hostSharedMat.uniforms.uColor.value.getHex()).toBe(ARCH_RING_CYAN);
+
+    // Alarming host gets red ring
+    const host1Mat = host1Ring.material as THREE.ShaderMaterial;
+    expect(host1Mat.uniforms.uColor.value.getHex()).toBe(ARCH_RING_ALARM);
+
+    // Unhover clears all rings
+    view.setHoveredNode?.(null);
+    expect(app1Ring.visible).toBe(false);
+    expect(host1Ring.visible).toBe(false);
+    expect(hostSharedRing.visible).toBe(false);
+
+    view.dispose();
   });
 });
