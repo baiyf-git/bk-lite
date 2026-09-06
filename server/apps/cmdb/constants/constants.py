@@ -522,7 +522,7 @@ COLLECT_OBJ_TREE = [
                 "credential_kind": "platform_api_account",
                 "credential_default_port": 8088,
                 "tag": ["Agentless", "HTTPS", "Beta"],
-                "desc": "采集华为 OceanStor 存储设备及其存储池、磁盘、卷（LUN）",
+                "desc": "采集华为 OceanStor 存储设备及其存储池、磁盘、卷（LUN）、以太口与 FC 口",
                 "encrypted_fields": ["accessKey", "password", "accessSecret"],
             },
         ],
