@@ -22,6 +22,7 @@ class NetAppOntapCollectionPlugin(AutoRegisterCollectionPluginMixin, NetAppOntap
 
     field_mappings = {
         "storage": {
+            "inst_name": NetAppOntapCollectMetrics.self_device,
             "device_sn": "device_sn",
             "ip_addr": "ip_addr",
             "model": "model",

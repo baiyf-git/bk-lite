@@ -33,6 +33,7 @@ def test_dell_unity_field_mappings_cover_six_models():
     assert "mac" in fms["storage_eth_port"]
     assert "wwpn" in fms["storage_fc_port"]
     assert "wwn" in fms["storage_volume"]
+    assert "inst_name" in fms["storage"]
 
 
 def test_dell_unity_registered_in_registry():

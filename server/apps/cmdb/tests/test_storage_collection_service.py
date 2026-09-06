@@ -150,6 +150,7 @@ def test_storage_main_fields(monkeypatch):
     runner.format_metrics()
 
     s = runner.result["storage"][0]
+    assert s["inst_name"] == STORAGE_NAME
     assert s["device_sn"] == "2102355TJUN0S1100017"
     assert s["ip_addr"] == "172.24.191.98"
     assert s["model"] == "Dorado 5000 V6"

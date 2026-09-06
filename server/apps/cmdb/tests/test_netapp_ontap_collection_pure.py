@@ -33,6 +33,7 @@ def test_netapp_ontap_field_mappings_cover_six_models():
     assert "mac" in fms["storage_eth_port"]
     assert "wwpn" in fms["storage_fc_port"]
     assert "wwn" in fms["storage_volume"]
+    assert "inst_name" in fms["storage"]
 
 
 def test_netapp_ontap_registered_in_registry():

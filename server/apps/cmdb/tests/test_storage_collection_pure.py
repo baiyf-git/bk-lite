@@ -43,6 +43,7 @@ def test_storage_field_mappings_cover_six_models():
     assert "mac" in fms["storage_eth_port"]
     assert "wwpn" in fms["storage_fc_port"]
     assert "ip_addr" in fms["storage"]
+    assert "inst_name" in fms["storage"]
 
 
 def test_storage_registered_in_registry():

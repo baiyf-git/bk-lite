@@ -64,6 +64,7 @@ def test_mock_pool_disk_volume_and_storage(monkeypatch):
     device_id, _collect_result_from_fixtures, _to_vm_vector = _mock_api()
     runner, collect_result = _map_mock_fixtures(monkeypatch)
     storage = runner.result["storage"][0]
+    assert storage["inst_name"] == STORAGE_NAME
     assert storage["device_sn"] == device_id
     assert storage["brand"] == "dell"
     assert storage["model"] == "Unity 480"

@@ -140,6 +140,7 @@ def test_dell_unity_storage_main_fields(monkeypatch):
     runner.format_metrics()
 
     storage = runner.result["storage"][0]
+    assert storage["inst_name"] == STORAGE_NAME
     assert storage["device_sn"] == "FNM00123456789"
     assert storage["ip_addr"] == "10.0.0.20"
     assert storage["brand"] == "dell"

@@ -140,6 +140,7 @@ def test_netapp_storage_main_fields(monkeypatch):
     runner.format_metrics()
 
     storage = runner.result["storage"][0]
+    assert storage["inst_name"] == STORAGE_NAME
     assert storage["device_sn"] == "1cd8a442-86d1-11e0-ae1c-123478563412"
     assert storage["ip_addr"] == "10.0.0.10"
     assert storage["brand"] == "netapp"

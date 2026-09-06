@@ -102,6 +102,7 @@ def test_mock_pool_disk_volume_regression(monkeypatch):
     device_id, _collect_result_from_fixtures, _to_vm_vector = _mock_api()
     runner, collect_result = _map_mock_fixtures(monkeypatch)
     storage = runner.result["storage"][0]
+    assert storage["inst_name"] == STORAGE_NAME
     assert storage["device_sn"] == device_id
     assert storage["model"] == "Dorado 5000 V6"
     assert storage["firmware_version"] == "V600R003C00"

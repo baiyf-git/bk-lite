@@ -210,5 +210,7 @@ class DellUnityCollectMetrics(CollectBase):
                     else:
                         data[field] = index_data.get(key_or_func, "")
                 if data:
+                    if model_id == self._MODEL_ID and not data.get("inst_name"):
+                        data["inst_name"] = self.inst_name
                     result.append(data)
             self.result[model_id] = result
