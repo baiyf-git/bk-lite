@@ -333,6 +333,8 @@ export interface Application3DArchitecturePlacedNode {
   kind: Application3DArchitectureKind;
   name: string;
   health?: Application3DHealth;
+  ip_addr?: string;
+  os_name?: string;
   x: number;
   y: number;
   z: number;
@@ -559,6 +561,8 @@ export const layoutApplication3DArchitecture = (
       kind: node.kind,
       name: node.name,
       health: node.health,
+      ip_addr: node.ip_addr,
+      os_name: node.os_name,
       x,
       y: rackStandY(planeY, size.height, node.kind),
       z,

@@ -114,6 +114,11 @@ describe('placeOverlayOutsideRect', () => {
     expect(ARCH_HOST_OVERLAY_GAP).toBeLessThanOrEqual(12);
     expect(placed.left - host.right).toBe(ARCH_HOST_OVERLAY_GAP);
   });
+
+  it('keeps ARCH_HOST_OVERLAY_SIZE aligned with the CSS chip box', () => {
+    // CSS `.app3d-arch-host-chip`: width 236px, min-height 108px
+    expect(ARCH_HOST_OVERLAY_SIZE).toEqual({ width: 236, height: 108 });
+  });
 });
 
 describe('architecture cabinet overlay AABB', () => {

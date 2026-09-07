@@ -98,6 +98,7 @@ export interface Application3DSceneController {
   focus: (applicationId: string | null) => void;
   showArchitecture: (data: Application3DArchitectureData) => void;
   hideArchitecture: () => void;
+  dismissArchitectureOverlay?: () => void;
   dispose: () => void;
 }
 
@@ -1603,6 +1604,7 @@ export const createApplication3DScene = (
     if (!architectureHostId) return;
     architectureHostId = '';
     options.onArchitectureHostSelect?.(null);
+    requestRender();
   };
 
   const selectArchitectureHost = (node: Application3DArchitectureNode) => {
@@ -1630,6 +1632,7 @@ export const createApplication3DScene = (
       hostScreenRect,
       overlay: { left: overlay.left, top: overlay.top },
     });
+    requestRender();
   };
 
   const pickArchitectureNode = (clientX: number, clientY: number) => {
@@ -1640,20 +1643,6 @@ export const createApplication3DScene = (
     for (const hit of hits) {
       const root = findArchitectureRackRoot(hit.object);
       if (root && typeof root.userData.nodeId === 'string') {
-        return architectureView.layout.nodes.find((node) => node.id === root.userData.nodeId);
-      }
-    }
-    return undefined;
-  };
-
-  const pickAlarmingArchitectureHost = (clientX: number, clientY: number) => {
-    if (!architectureView || phase !== 'architecture') return undefined;
-    if (!setPointerFromClient(clientX, clientY)) return undefined;
-    const targets = Array.from(architectureView.nodeGroups.values());
-    const hits = raycaster.intersectObjects(targets.length > 0 ? targets : [architectureView.group], true);
-    for (const hit of hits) {
-      const root = findArchitectureRackRoot(hit.object);
-      if (root?.userData.alarming && typeof root.userData.nodeId === 'string') {
         return architectureView.layout.nodes.find((node) => node.id === root.userData.nodeId);
       }
     }
@@ -1887,7 +1876,7 @@ export const createApplication3DScene = (
   const syncCursor = (clientX: number, clientY: number) => {
     if (!active || !options.interactive) return;
     if (phase === 'architecture') {
-      renderer.domElement.style.cursor = pickAlarmingArchitectureHost(clientX, clientY)
+      renderer.domElement.style.cursor = pickArchitectureNode(clientX, clientY)
         ? 'pointer'
         : idleCursor();
       return;
@@ -1995,13 +1984,17 @@ export const createApplication3DScene = (
       const hitNode = pickArchitectureNode(event.clientX, event.clientY);
       if (hitNode) {
         if (architectureSelectedId === hitNode.id) {
-          architectureSelectedId = null;
-          clearArchitectureHost();
-          architectureView?.setHoveredNode?.(null);
+          if (hitNode.kind === 'host' && !architectureHostId) {
+            selectArchitectureHost(hitNode);
+          } else {
+            architectureSelectedId = null;
+            clearArchitectureHost();
+            architectureView?.setHoveredNode?.(null);
+          }
         } else {
           architectureSelectedId = hitNode.id;
           architectureView?.setHoveredNode?.(architectureSelectedId);
-          if (hitNode.kind === 'host' && hitNode.health?.state === 'alarming') {
+          if (hitNode.kind === 'host') {
             selectArchitectureHost(hitNode);
           } else {
             clearArchitectureHost();
@@ -2100,6 +2093,9 @@ export const createApplication3DScene = (
     focus,
     showArchitecture,
     hideArchitecture,
+    dismissArchitectureOverlay: () => {
+      clearArchitectureHost();
+    },
     setActive: (nextActive) => {
       if (disposed || active === nextActive) return;
       active = nextActive;
