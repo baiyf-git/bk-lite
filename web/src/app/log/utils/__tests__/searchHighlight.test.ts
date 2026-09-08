@@ -18,6 +18,22 @@ describe('extractHighlightTerms', () => {
     ]);
     expect(extractHighlightTerms('host.name:web01')).toEqual(['web01']);
   });
+
+  it('does not treat the field-value colon as a highlight term', () => {
+    expect(extractHighlightTerms('udp AND "@metadata.beat":"packetbeat"')).toEqual([
+      'packetbeat',
+      'udp'
+    ]);
+    expect(extractHighlightTerms('"@timestamp":"2026-09-08T07:39:45.563Z"')).toEqual([
+      '2026-09-08T07:39:45.563Z'
+    ]);
+  });
+
+  it('keeps colons that belong to a quoted phrase', () => {
+    expect(extractHighlightTerms('"error: cannot find file"')).toEqual([
+      'error: cannot find file'
+    ]);
+  });
 });
 
 describe('splitHighlightedText', () => {
@@ -37,6 +53,17 @@ describe('splitHighlightedText', () => {
   it('returns the original text when nothing matches', () => {
     expect(splitHighlightedText('access granted', ['error'])).toEqual([
       { text: 'access granted', match: false }
+    ]);
+  });
+
+  it('does not highlight colons from field filters in timestamps or host:port', () => {
+    const terms = extractHighlightTerms('udp AND "@metadata.beat":"packetbeat"');
+    expect(splitHighlightedText('udp 127.0.0.1:53 -> 127.0.0.1:43165', terms)).toEqual([
+      { text: 'udp', match: true },
+      { text: ' 127.0.0.1:53 -> 127.0.0.1:43165', match: false }
+    ]);
+    expect(splitHighlightedText('2026-09-08T07:39:45.563Z', terms)).toEqual([
+      { text: '2026-09-08T07:39:45.563Z', match: false }
     ]);
   });
 });

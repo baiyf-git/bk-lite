@@ -1,6 +1,7 @@
-const QUERY_OPERATORS = new Set(['and', 'or', 'not', '|', '*']);
+const QUERY_OPERATORS = new Set(['and', 'or', 'not', '|', '*', ':']);
 const QUOTED_TERM = /"((?:\\.|[^"\\])*)"/g;
 const FIELD_PREFIX = /[A-Za-z_][A-Za-z0-9_.]*:/g;
+const QUOTED_FIELD_SUFFIX = /^\s*:/;
 
 const unescapeQuotedTerm = (value: string) =>
   value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -17,9 +18,14 @@ export function extractHighlightTerms(query?: string): string[] {
   const terms: string[] = [];
   for (const match of trimmed.matchAll(QUOTED_TERM)) {
     const quoted = unescapeQuotedTerm(match[1] || '');
-    if (quoted) {
-      terms.push(quoted);
+    if (!quoted) {
+      continue;
     }
+    const afterQuote = (match.index ?? 0) + match[0].length;
+    if (QUOTED_FIELD_SUFFIX.test(trimmed.slice(afterQuote))) {
+      continue;
+    }
+    terms.push(quoted);
   }
 
   const unquoted = trimmed.replace(QUOTED_TERM, ' ').replace(FIELD_PREFIX, ' ');
