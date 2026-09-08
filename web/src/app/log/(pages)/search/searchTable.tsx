@@ -200,10 +200,14 @@ const SearchTable: React.FC<SearchTableProps> = ({
                     )}
                   >
                     <span className="break-all">
-                      <SearchHighlight
-                        text={item.value}
-                        terms={highlightTerms}
-                      />
+                      {item.label === 'message' || item.label === '_msg' ? (
+                        <SearchHighlight
+                          text={item.value}
+                          terms={highlightTerms}
+                        />
+                      ) : (
+                        String(item.value ?? '') || '--'
+                      )}
                     </span>
                     <CaretDownFilled
                       className={`text-[12px] ${searchStyle.arrow}`}
