@@ -144,7 +144,7 @@ query_condition
 | V1c | `yoy` | 同比 | 同模型，更长 `compare_offset`（如 `30d` / `1y`） | 同环比 | 依赖 VM 留存；日历对齐 V1 用固定 offset 近似 |
 | V1.1 | `change` / `rate` | 变化量 / 速率 | 相邻周期，无长 offset | Δ 或单位时间速率 | 编译 `delta` / `increase` / `rate` 或双窗口相减 |
 | V1.1 | `baseline` | 简化统计基线 | 近 N 个同期（`baseline_count` + 同期 offset） | 相对基线的偏差 % 或倍数 | **禁止**复用 `PolicyInstanceBaseline` |
-| V1.2 | `timeleft` | 容量预测 | 剩余时间阈值（天）+ 指标白名单 | 预测剩余可用时间 &lt; N 天 | 场景化，可先磁盘 /  inode 等白名单 |
+| V1.2 | `timeleft` | 容量预测 | 剩余时间阈值（天）+ 指标白名单 | 预测剩余可用时间 &lt; N 天 | 场景化，可先磁盘 / inode 等白名单 |
 | P2 | （公式增强） | 公式不止四则 | 现有 `query_condition.type=formula` 语言扩展 | 不改变 `calc_mode` 本身 | V1 **非必达**，见 §5.8 |
 
 排期顺序见 §9：V1a → V1b → V1c → V1.1（变化量 + 基线）→ V1.2（容量预测，可选公式）。
