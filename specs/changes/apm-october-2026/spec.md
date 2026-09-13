@@ -66,7 +66,7 @@ Monitor / Log / 节点管理十月规划各有自己的唯一正文，本文不�
 - 扫描链路是 `service_red → 窗口聚合 → 阈值比较 → 连续次数`。`test_query` 只算当前窗绝对值，并返回 `breached`。见 `server/apps/apm/services/policies.py`。
 - 策略编辑器四段：基本信息、指标定义、告警条件、通知配置；右侧「指标预览」走 `previewPolicy` → `test_query`。见 `web/src/app/apm/events/policies/policy-editor.tsx`。
 - 探索列表用 `collect_visible_page` 先过滤再算游标。详情 `can_view_detail` 是「任一 Span 可见即整链放行」，`retrieve` 原样返回全部 Span。见 `server/apps/apm/services/trace_access.py`、`server/apps/apm/views/traces.py`。
-- 敏感属性脱敏已在。查询窗最长 35 天。禁止任意查询语言。见 `specs/capabilities/apm-product.md`、`apm-alerting.md`。
+- 敏感属性脱敏已在。查询窗最长 35 天。禁止任意查询语言。见 `specs/capabilities/apm-product.md`、`specs/capabilities/apm-alerting.md`。
 - APM 拥有判定与域内生命周期；事件副本单向抄送告警中心，告警中心不得回写。见 `CONTEXT.md`「领域告警 / 告警中心事件」、`docs/design/product-decisions/domain-alert-handlers.md`。
 - 探针安装由节点管理承接。APM 已按云区域解析区内 OTLP/HTTP `:4318`，探针制品走 APM 下载口，不走节点管理包上传。见 `docs/operations/apm-probe-artifact-release.md`。十月 APM **不把安装器写进本清单**；区内接入点与探针制品与节点管理共背，另册验收。
 
@@ -465,9 +465,9 @@ W3 前两天仍未开工 → 整条移十一月。不要做成「开关在、扫
 
 ## 10. 事实入口
 
-- 长期契约：`specs/capabilities/apm-product.md`、`apm-alerting.md`、`apm-function-list.md`、`apm-architecture.md`
+- 长期契约：`specs/capabilities/apm-product.md`、`specs/capabilities/apm-alerting.md`、`specs/capabilities/apm-function-list.md`、`specs/capabilities/apm-architecture.md`
 - 术语：`CONTEXT.md`「领域告警 / 告警中心事件 / APM 遥测入口」
-- 决策记忆：`docs/design/product-decisions/domain-alert-handlers.md`、`apm-data-plane.md`
-- 被本文吸收的前序稿：PR #19、PR #21（合并后请关闭，勿再当事实源）
+- 决策记忆：`docs/design/product-decisions/domain-alert-handlers.md`、`docs/design/product-decisions/apm-data-plane.md`
+- 被本文吸收的前序稿：PR #19、PR #21（合并后请关闭，勿再当事实源；#21 文件不在 master，不必再开一份 reviews 稿）
 - 并行但不改写：Monitor / Log / 节点管理各自的十月规划
 - 代码证据：`ApmPolicy`、`DjangoApmPolicyService.test_query`、`TraceAccessResolver.can_view_detail`、策略页 `previewPolicy`
